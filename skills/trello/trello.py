@@ -22,7 +22,25 @@ from pathlib import Path
 from typing import Any
 
 API = "https://api.trello.com/1"
-EXTENSION_ROOT = Path(__file__).resolve().parent.parent.parent
+def extension_roots() -> list[Path]:
+    """
+    Where the login might be.
+
+    This file's own folder first — a clone, or the extension as prifly runs
+    it. Then prifly's extensions folder, because Claude Code installs a plugin
+    by copying it into its cache, and the copy has no auth.json: the login
+    belongs to the extension the reader actually enabled, not to every copy of
+    the script.
+    """
+    here = Path(__file__).resolve().parent.parent.parent
+    named = os.environ.get("PRIFLY_TRELLO_HOME")
+    installed = Path.home() / ".local/share/prifly/extensions/prifly-ext-trello"
+    roots = [here, installed] if named is None else [Path(named), here, installed]
+    seen: list[Path] = []
+    for root in roots:
+        if root not in seen:
+            seen.append(root)
+    return seen
 
 
 def load_creds() -> tuple[str, str]:
@@ -32,15 +50,18 @@ def load_creds() -> tuple[str, str]:
     if key and tok:
         return key, tok
 
-    def read(name: str) -> dict[str, Any]:
-        path = EXTENSION_ROOT / name
-        try:
-            return json.loads(path.read_text())
-        except (OSError, ValueError):
-            return {}
+    def read(name: str, field: str) -> str | None:
+        for root in extension_roots():
+            try:
+                found = json.loads((root / name).read_text()).get(field)
+            except (OSError, ValueError):
+                continue
+            if found:
+                return str(found)
+        return None
 
-    key = key or read("config.json").get("appKey")
-    tok = tok or read("auth.json").get("token")
+    key = key or read("config.json", "appKey")
+    tok = tok or read("auth.json", "token")
     if key and tok:
         return key, tok
     sys.exit(
