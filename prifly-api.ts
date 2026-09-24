@@ -133,8 +133,44 @@ export type LaunchBoard = {
   actions?: LaunchChoice[];
 };
 
-/** One item, read whole. The body is Markdown; the window draws it. */
-export type LaunchItem = { title: string; url?: string; markdown: string };
+/** A file on an item: a picture to look at, or something to fetch elsewhere. */
+export type LaunchItemFile = {
+  /** This extension's own name for it, so two files called image.png are two. */
+  id?: string;
+  name: string;
+  url?: string;
+  /** The picture itself, as a `data:` URI, when it could be fetched. */
+  data?: string;
+  at?: string;
+};
+
+/** One thing somebody said on an item, oldest first. Markdown. */
+export type LaunchItemNote = { by: string; at?: string; text: string };
+
+/**
+ * One item, read whole.
+ *
+ * The prose is Markdown; what is not prose — where it sits, who is on it,
+ * what is attached, what has been said — is kept apart, so the window can lay
+ * a ticket out as a ticket rather than as a page of text.
+ */
+export type LaunchItem = {
+  title: string;
+  url?: string;
+  /** The column it sits in now, by id, and what that column is called. */
+  column?: string;
+  columnName?: string;
+  labels?: { colour: LabelColour; name: string }[];
+  people?: string[];
+  due?: string;
+  dueLate?: boolean;
+  /** The description. */
+  markdown: string;
+  /** Checklists, as `- [x]` task lists under their own headings. */
+  checklists?: string;
+  files?: LaunchItemFile[];
+  notes?: LaunchItemNote[];
+};
 
 /**
  * What a chosen thing becomes: the New session form, filled in — or, with an

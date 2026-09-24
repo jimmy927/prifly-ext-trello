@@ -16,7 +16,7 @@
  */
 
 import { join } from "node:path";
-import { cardFace, cardMarkdown } from "./card-face";
+import { cardFace, cardItem, shortDate } from "./card-face";
 import { cardPrompt } from "./card-prompt";
 import type {
   Decoration,
@@ -26,6 +26,7 @@ import type {
   LaunchBoard,
   LaunchChoice,
   LaunchItem,
+  LaunchItemFile,
 } from "./prifly-api";
 import { isSetupKey, runSetup, setupChoices, setupTail } from "./setup";
 import {
@@ -143,24 +144,30 @@ function listName(at: World, id: string): string {
   return at.lists.find((list) => list.id === id)?.name ?? "";
 }
 
-/** One card, read: its text, its conversation and its pictures. */
+/** One card, read: its text, its checklists, its files and its conversation. */
 export async function open(_launchId: string, key: string): Promise<LaunchItem> {
   const at = here();
   const auth = creds(at);
   if (auth === null) throw new Error("Not logged in to Trello.");
   const full = await fullCard(key, auth);
-  const pictures: { name: string; dataUrl: string }[] = [];
-  const links: { name: string; url: string }[] = [];
+  const files: LaunchItemFile[] = [];
   for (const attachment of full.attachments) {
-    const dataUrl = await picture(attachment, auth, PICTURE_LIMIT).catch(() => null);
-    if (dataUrl === null) links.push({ name: attachment.name, url: attachment.url });
-    else pictures.push({ name: attachment.name, dataUrl });
+    // A picture is carried across so it can be looked at here; anything else
+    // — a link to a GitHub issue, a file on a drive — stays where it is.
+    const data = await picture(attachment, auth, PICTURE_LIMIT).catch(() => null);
+    files.push({
+      id: attachment.id,
+      name: attachment.name,
+      url: attachment.isUpload ? "" : attachment.url,
+      data: data ?? "",
+      at: attachment.at === "" ? "" : shortDate(attachment.at),
+    });
   }
-  return {
-    title: full.card.name,
-    url: full.card.url,
-    markdown: cardMarkdown(full, at.lists.find((list) => list.id === full.card.idList), pictures, links),
-  };
+  return cardItem(
+    full,
+    at.lists.find((list) => list.id === full.card.idList),
+    files,
+  );
 }
 
 /** Dragged into another column, or sent there from a card's menu. */

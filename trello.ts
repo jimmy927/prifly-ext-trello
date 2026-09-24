@@ -43,7 +43,14 @@ export type TrelloCheckItem = { name: string; state: string };
 
 export type TrelloChecklist = { name: string; items: TrelloCheckItem[] };
 
-export type TrelloAttachment = { id: string; name: string; url: string; isUpload: boolean };
+export type TrelloAttachment = {
+  id: string;
+  name: string;
+  url: string;
+  isUpload: boolean;
+  /** When it was attached, as Trello dates it. */
+  at: string;
+};
 
 /** A card with everything on it: what a session is meant to start from. */
 export type FullCard = {
@@ -128,6 +135,7 @@ export async function fullCard(id: string, creds: Creds): Promise<FullCard> {
       name: attachment.name,
       url: attachment.url,
       isUpload: attachment.isUpload,
+      at: attachment.date ?? "",
     })),
   };
 }
@@ -138,7 +146,13 @@ type CommentAction = {
   data?: { text?: string };
 };
 type RawChecklist = { name: string; checkItems: { name: string; state: string }[] };
-type RawAttachment = { id: string; name: string; url: string; isUpload: boolean };
+type RawAttachment = {
+  id: string;
+  name: string;
+  url: string;
+  isUpload: boolean;
+  date?: string;
+};
 
 /** Move a card to another list: what the chip's menu does. */
 export async function moveCard(id: string, idList: string, creds: Creds): Promise<void> {

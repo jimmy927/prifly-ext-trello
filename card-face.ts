@@ -7,7 +7,13 @@
  * which cards share a colour and how heavy a card is, not Trello's blue.
  */
 
-import type { LabelColour, LaunchBadges, LaunchChoice } from "./prifly-api";
+import type {
+  LabelColour,
+  LaunchBadges,
+  LaunchChoice,
+  LaunchItem,
+  LaunchItemFile,
+} from "./prifly-api";
 import type { FullCard, TrelloCard, TrelloList } from "./trello";
 
 /** Trello has more colours than the window draws; the near ones stand in. */
@@ -63,51 +69,42 @@ export function cardFace(card: TrelloCard, tone: LaunchChoice["tone"]): LaunchCh
 }
 
 /**
- * The card, written out.
+ * The card, as a ticket rather than as a page of prose.
  *
- * Markdown, because the window already draws that and because a ticket IS
- * prose: a description, a conversation, some lists. The pictures are carried
- * in the text as data, so that a screenshot somebody attached is simply there
- * when the card is opened, rather than a link back to Trello.
+ * The description and the checklists are Markdown, because that is what they
+ * are. Everything else is kept apart — the column it sits in, the people on
+ * it, the files, the conversation — so that the window can lay it out the way
+ * a card is laid out, and so that a screenshot is a picture rather than a
+ * line of base64 in the middle of a sentence.
  */
-export function cardMarkdown(
+export function cardItem(
   full: FullCard,
   list: TrelloList | undefined,
-  pictures: { name: string; dataUrl: string }[],
-  links: { name: string; url: string }[],
-): string {
+  files: LaunchItemFile[],
+): LaunchItem {
   const { card } = full;
-  const blocks = [
-    facts(card, list),
-    card.desc.trim(),
-    checklists(full),
-    pictures.length === 0
-      ? ""
-      : `## Attachments\n\n${pictures.map((one) => `![${one.name}](${one.dataUrl})`).join("\n\n")}`,
-    links.length === 0
-      ? ""
-      : `${pictures.length === 0 ? "## Attachments\n\n" : ""}${links
-          .map((one) => `- [${one.name}](${one.url})`)
-          .join("\n")}`,
-    comments(full),
-  ];
-  return blocks.filter((block) => block !== "").join("\n\n");
-}
-
-function facts(card: TrelloCard, list: TrelloList | undefined): string {
-  const said = [
-    list === undefined ? "" : `**${list.name}**`,
-    card.members.length === 0 ? "" : card.members.map((member) => member.fullName).join(", "),
-    card.due === null ? "" : `due ${shortDate(card.due)}${card.dueComplete ? " ✓" : ""}`,
-    card.labels.length === 0
-      ? ""
-      : card.labels.map((label) => label.name || label.color || "label").join(" · "),
-  ].filter((fact) => fact !== "");
-  return said.join(" · ");
+  return {
+    title: card.name,
+    url: card.url,
+    column: card.idList,
+    columnName: list?.name ?? "",
+    labels: card.labels.map((label) => ({ colour: colour(label.color), name: label.name })),
+    people: card.members.map((member) => member.fullName),
+    due: card.due === null ? "" : shortDate(card.due),
+    dueLate: card.due !== null && !card.dueComplete && Date.parse(card.due) < Date.now(),
+    markdown: card.desc.trim(),
+    checklists: checklists(full),
+    files,
+    notes: full.comments.map((comment) => ({
+      by: comment.by,
+      at: shortDate(comment.at),
+      text: comment.text,
+    })),
+  };
 }
 
 function checklists(full: FullCard): string {
-  const written = full.checklists
+  return full.checklists
     .map((checklist) => {
       const items = checklist.items
         .map((item) => `- [${item.state === "complete" ? "x" : " "}] ${item.name}`)
@@ -115,13 +112,4 @@ function checklists(full: FullCard): string {
       return `**${checklist.name}**\n\n${items}`;
     })
     .join("\n\n");
-  return written === "" ? "" : `## Checklists\n\n${written}`;
-}
-
-function comments(full: FullCard): string {
-  if (full.comments.length === 0) return "";
-  const written = full.comments
-    .map((comment) => `**${comment.by}** · ${comment.at.slice(0, 10)}\n\n${comment.text}`)
-    .join("\n\n---\n\n");
-  return `## Comments\n\n${written}`;
 }
