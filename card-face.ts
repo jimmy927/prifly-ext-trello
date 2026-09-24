@@ -37,6 +37,11 @@ function colour(name: string | null): LabelColour {
   return COLOURS[name.split("_")[0] ?? ""] ?? "grey";
 }
 
+/** A title as long as a sentence, cut to something a dialog can say. */
+function short(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
 /** "2026-09-24T…" → "24 Sep", which is how a due date reads on a board. */
 export function shortDate(iso: string): string {
   const at = new Date(iso);
@@ -63,6 +68,17 @@ export function cardFace(card: TrelloCard, tone: LaunchChoice["tone"]): LaunchCh
     tone,
     url: card.url,
     stripes: card.labels.map((label) => colour(label.color)),
+    // What a card's own menu offers. Archiving is Trello's own idea of
+    // deleting — the card leaves the board and can be sent back — so it asks
+    // first and is drawn as the dangerous one.
+    actions: [
+      {
+        id: "archive",
+        label: "Archive card",
+        confirm: `“${short(card.name, 60)}” leaves the board. Trello can send it back.`,
+        destructive: true,
+      },
+    ],
     people: card.members.map((member) => member.fullName),
     badges,
   };

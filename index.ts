@@ -30,6 +30,8 @@ import type {
 } from "./prifly-api";
 import { isSetupKey, runSetup, setupChoices, setupTail } from "./setup";
 import {
+  archiveCard,
+  type Creds,
   download,
   fullCard,
   moveCard,
@@ -254,17 +256,42 @@ export async function launched(_launchId: string, key: string, sessionId: string
   show();
 }
 
-/** The chip's menu: the only item it has is a move to another list. */
-export async function action(key: string, actionId: string): Promise<void> {
+/**
+ * What a card's menu offers, wherever that menu is: the chip on a session, or
+ * the card on the board. The board is read again afterwards, so an archived
+ * card is simply not there any more.
+ */
+export async function action(key: string, actionId: string): Promise<string> {
   const at = here();
   const auth = creds(at);
   if (auth === null) throw new Error("Not logged in to Trello.");
-  const idList = actionId.startsWith("move:") ? actionId.slice("move:".length) : "";
-  if (idList === "") throw new Error(`Nothing to do for ${actionId}`);
-  await moveCard(key, idList, auth);
-  at.api.log("moved", { card: key, list: idList });
+  const name = at.cards.find((card) => card.shortLink === key)?.name ?? "The card";
+  const done = await carryOut(at, auth, key, actionId, name);
   await reload(at);
   show();
+  return done;
+}
+
+async function carryOut(
+  at: World,
+  auth: Creds,
+  key: string,
+  actionId: string,
+  name: string,
+): Promise<string> {
+  if (actionId === "archive") {
+    await archiveCard(key, auth);
+    at.api.log("archived", { card: key });
+    return `Archived “${name}”.`;
+  }
+  if (actionId.startsWith("move:")) {
+    const idList = actionId.slice("move:".length);
+    await moveCard(key, idList, auth);
+    at.api.log("moved", { card: key, list: idList });
+    const list = at.lists.find((entry) => entry.id === idList)?.name ?? "another list";
+    return `Moved “${name}” to ${list}.`;
+  }
+  throw new Error(`Nothing to do for ${actionId}`);
 }
 
 function here(): World {

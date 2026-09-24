@@ -116,6 +116,8 @@ export type LaunchChoice = {
   url?: string;
   /** Label colours, drawn as stripes across the top of the card. */
   stripes?: LabelColour[];
+  /** What its right-click menu offers; answered by this module's `action`. */
+  actions?: DecorationAction[];
   /** Who is on it; the window draws initials. */
   people?: string[];
   badges?: LaunchBadges;

@@ -154,6 +154,12 @@ type RawAttachment = {
   date?: string;
 };
 
+/** Off the board, where Trello keeps it until somebody sends it back. */
+export async function archiveCard(id: string, creds: Creds): Promise<void> {
+  const response = await fetch(url(`/cards/${id}`, creds, { closed: "true" }), { method: "PUT" });
+  if (!response.ok) throw new Error(`Trello could not archive the card: ${response.status}`);
+}
+
 /** Move a card to another list: what the chip's menu does. */
 export async function moveCard(id: string, idList: string, creds: Creds): Promise<void> {
   const response = await fetch(url(`/cards/${id}`, creds, { idList }), { method: "PUT" });
