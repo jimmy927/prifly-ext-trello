@@ -83,6 +83,7 @@ export function cardItem(
   files: LaunchItemFile[],
 ): LaunchItem {
   const { card } = full;
+  const shown = pictures(files);
   return {
     title: card.name,
     url: card.url,
@@ -92,15 +93,47 @@ export function cardItem(
     people: card.members.map((member) => member.fullName),
     due: card.due === null ? "" : shortDate(card.due),
     dueLate: card.due !== null && !card.dueComplete && Date.parse(card.due) < Date.now(),
-    markdown: card.desc.trim(),
+    markdown: inlineFiles(card.desc.trim(), shown),
     checklists: checklists(full),
     files,
     notes: full.comments.map((comment) => ({
       by: comment.by,
       at: shortDate(comment.at),
-      text: comment.text,
+      text: inlineFiles(comment.text, shown),
     })),
   };
+}
+
+/** The attachments that came across as pictures, by Trello's id for them. */
+function pictures(files: readonly LaunchItemFile[]): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const file of files) {
+    if (file.id !== undefined && file.data !== undefined && file.data !== "") {
+      found.set(file.id, file.data);
+    }
+  }
+  return found;
+}
+
+/** `…/attachments/<id>/…` — the id is what ties an embed to the file it is. */
+const EMBED = /!\[([^\]]*)]\((https:\/\/trello\.com\/1\/cards\/[^)\s]*?\/attachments\/([0-9a-f]{24})\/[^)\s]*)\)/g;
+
+/**
+ * Pictures written into the prose, made to draw.
+ *
+ * A picture dropped into a description is written as a link to Trello, and
+ * Trello serves its own attachments only to a request that signs itself — so
+ * in the window it was a broken image with a filename under it. The bytes
+ * were already fetched for the Attachments section, so the embed is pointed
+ * at those instead. One we could not fetch becomes a link, which opens in the
+ * reader's browser where they are signed in.
+ */
+export function inlineFiles(text: string, shown: ReadonlyMap<string, string>): string {
+  return text.replace(EMBED, (whole, alt: string, url: string, id: string) => {
+    const data = shown.get(id);
+    if (data !== undefined) return `![${alt}](${data})`;
+    return `[${alt === "" ? "attachment" : alt}](${url})`;
+  });
 }
 
 function checklists(full: FullCard): string {
