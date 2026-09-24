@@ -1,0 +1,7 @@
+{
+  "name": "trello",
+  "description": "Reading Trello cards from a session: search, read a card whole — description, comments, checklists — and download its attachments so the images can be looked at.",
+  "version": "0.1.0",
+  "author": { "name": "Jimmy Engelbrecht" },
+  "homepage": "https://github.com/jimmy927/prifly-ext-trello"
+}

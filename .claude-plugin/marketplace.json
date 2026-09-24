@@ -1,0 +1,12 @@
+{
+  "name": "prifly-ext-trello",
+  "owner": { "name": "Jimmy Engelbrecht" },
+  "metadata": { "description": "The Trello prifly extension, as a Claude Code plugin", "version": "0.1.0" },
+  "plugins": [
+    {
+      "name": "trello",
+      "description": "Search and read Trello cards, and download their attachments.",
+      "source": "./"
+    }
+  ]
+}

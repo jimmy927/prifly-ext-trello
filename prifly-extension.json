@@ -1,0 +1,17 @@
+{
+  "id": "trello",
+  "name": "Trello board",
+  "description": "Your Trello board in prifly: log in with your own Trello account, start a session from a card with its text, comments and pictures, and keep the card on that session's banner.",
+  "version": "0.1.0",
+  "main": "index.ts",
+  "prompt": "prompt.md",
+  "launch": [
+    {
+      "id": "card",
+      "label": "From a Trello card…",
+      "icon": "link",
+      "description": "Your board. Logging in and choosing which board live here too. The session starts knowing the whole card: description, comments, checklists and every attached picture.",
+      "searchPlaceholder": "Filter by title, label, member or card id…"
+    }
+  ]
+}
