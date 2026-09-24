@@ -26,7 +26,8 @@ export type TrelloCard = {
   idList: string;
   due: string | null;
   dueComplete: boolean;
-  labels: { name: string; color: string }[];
+  /** A label may have a name and no colour, or a colour and no name. */
+  labels: { name: string; color: string | null }[];
   members: { fullName: string; username: string }[];
   badges: {
     comments: number;

@@ -24,7 +24,9 @@ const COLOURS: Record<string, LabelColour> = {
   black: "grey",
 };
 
-function colour(name: string): LabelColour {
+/** A label with no colour of its own is drawn in the plain one. */
+function colour(name: string | null): LabelColour {
+  if (name === null) return "grey";
   // Trello writes shades as "green_dark"; the shade is not worth carrying.
   return COLOURS[name.split("_")[0] ?? ""] ?? "grey";
 }
@@ -99,7 +101,7 @@ function facts(card: TrelloCard, list: TrelloList | undefined): string {
     card.due === null ? "" : `due ${shortDate(card.due)}${card.dueComplete ? " ✓" : ""}`,
     card.labels.length === 0
       ? ""
-      : card.labels.map((label) => label.name || label.color).join(" · "),
+      : card.labels.map((label) => label.name || label.color || "label").join(" · "),
   ].filter((fact) => fact !== "");
   return said.join(" · ");
 }
