@@ -16,10 +16,26 @@
  */
 
 import { join } from "node:path";
+import { cardFace, cardMarkdown } from "./card-face";
 import { cardPrompt } from "./card-prompt";
-import type { Decoration, DecorationTone, ExtensionApi, Launch, LaunchChoice } from "./prifly-api";
+import type {
+  Decoration,
+  DecorationTone,
+  ExtensionApi,
+  Launch,
+  LaunchBoard,
+  LaunchChoice,
+  LaunchItem,
+} from "./prifly-api";
 import { isSetupKey, runSetup, setupChoices, setupTail } from "./setup";
-import { download, fullCard, moveCard, safeName, type TrelloCard } from "./trello";
+import {
+  download,
+  fullCard,
+  moveCard,
+  picture,
+  safeName,
+  type TrelloCard,
+} from "./trello";
 import { type Config, creds, load, ready, reload, type World, writeState } from "./world";
 
 let world: World | null = null;
@@ -101,28 +117,65 @@ function tone(card: TrelloCard, list: string, config: Config): DecorationTone {
 }
 
 /**
- * What the chooser shows: the setup steps until there are none, then the
- * board in its columns, narrowed by what the reader typed.
+ * What the chooser shows: the setup steps until there are none, and then the
+ * board — every column it has, the cards the filter leaves, and the two things
+ * that are about the board rather than about a card.
+ *
+ * The columns stay when a filter empties them: a board with its columns
+ * missing is not the board the reader knows.
  */
-export async function choices(_launchId: string, query: string): Promise<LaunchChoice[]> {
+export async function choices(_launchId: string, query: string): Promise<LaunchChoice[] | LaunchBoard> {
   const at = here();
   const setup = await setupChoices(at);
   if (setup !== null) return setup;
   if (at.cards.length === 0) await reload(at);
   const words = query.trim().toLowerCase();
-  const cards = at.lists.flatMap((list) =>
-    at.cards
-      .filter((card) => card.idList === list.id && matches(card, words))
-      .map((card) => ({
-        key: card.shortLink,
-        title: card.name,
-        group: list.name,
-        detail: detail(card),
-        tone: tone(card, list.name, at.config),
-      })),
-  );
-  return [...cards, ...setupTail(at)];
+  return {
+    columns: at.lists.map((list) => ({ id: list.id, name: list.name })),
+    items: at.cards
+      .filter((card) => matches(card, words))
+      .map((card) => cardFace(card, tone(card, listName(at, card.idList), at.config))),
+    actions: setupTail(at),
+  };
 }
+
+function listName(at: World, id: string): string {
+  return at.lists.find((list) => list.id === id)?.name ?? "";
+}
+
+/** One card, read: its text, its conversation and its pictures. */
+export async function open(_launchId: string, key: string): Promise<LaunchItem> {
+  const at = here();
+  const auth = creds(at);
+  if (auth === null) throw new Error("Not logged in to Trello.");
+  const full = await fullCard(key, auth);
+  const pictures: { name: string; dataUrl: string }[] = [];
+  const links: { name: string; url: string }[] = [];
+  for (const attachment of full.attachments) {
+    const dataUrl = await picture(attachment, auth, PICTURE_LIMIT).catch(() => null);
+    if (dataUrl === null) links.push({ name: attachment.name, url: attachment.url });
+    else pictures.push({ name: attachment.name, dataUrl });
+  }
+  return {
+    title: full.card.name,
+    url: full.card.url,
+    markdown: cardMarkdown(full, at.lists.find((list) => list.id === full.card.idList), pictures, links),
+  };
+}
+
+/** Dragged into another column, or sent there from a card's menu. */
+export async function move(_launchId: string, key: string, column: string): Promise<void> {
+  const at = here();
+  const auth = creds(at);
+  if (auth === null) throw new Error("Not logged in to Trello.");
+  await moveCard(key, column, auth);
+  at.api.log("moved", { card: key, list: column });
+  await reload(at);
+  show();
+}
+
+/** Big enough for a screenshot, small enough for a frame on the socket. */
+const PICTURE_LIMIT = 4_000_000;
 
 /** Title, description, labels and members: what a person would search by. */
 function matches(card: TrelloCard, words: string): boolean {
@@ -137,17 +190,6 @@ function matches(card: TrelloCard, words: string): boolean {
     .join(" ")
     .toLowerCase();
   return words.split(/\s+/).every((word) => haystack.includes(word));
-}
-
-function detail(card: TrelloCard): string {
-  return [
-    card.members.map((member) => member.fullName).join(", "),
-    card.due === null ? "" : `due ${card.due.slice(0, 10)}`,
-    card.badges.attachments === 0 ? "" : `${card.badges.attachments} attachments`,
-    card.badges.comments === 0 ? "" : `${card.badges.comments} comments`,
-  ]
-    .filter((part) => part !== "")
-    .join(" · ");
 }
 
 /**

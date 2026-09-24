@@ -10,6 +10,9 @@
  *     { "id": "vastai", "name": "Vast.ai boxes", "main": "index.ts",
  *       "description": "…", "version": "0.1.0" }
  *
+ * Python tools come from a `pyproject.toml` and `uv.lock` beside it: prifly
+ * builds the extension's `.venv` before starting it (`python.ts`).
+ *
  * The module exports `activate(api)`, which may return a function the host
  * calls to stop it. It runs inside the host, with the host's rights: enable
  * only extensions you would run yourself.
@@ -35,7 +38,16 @@ export type DecorationIcon =
   | "dot";
 
 /** One item in a chip's own menu: "Move to Doing" on a Trello card. */
-export type DecorationAction = { id: string; label: string };
+/** One item in a chip's menu: "Move to Doing" on a Trello card, "Destroy box…" on a Vast.ai one. */
+export type DecorationAction = {
+  id: string;
+  /** The menu's words: "Destroy box…". */
+  label: string;
+  /** Asked before it runs: what it will do and what is lost. */
+  confirm?: string | undefined;
+  /** Drawn in the danger colour. */
+  destructive?: boolean | undefined;
+};
 
 export type Decoration = {
   /** Stable within the extension, so the window keeps an item's place. */
@@ -46,10 +58,46 @@ export type Decoration = {
   tone: DecorationTone;
   /** Shown on hover, one line each. */
   details: string[];
+  /**
+   * What a click on the item opens: a program in a terminal window of
+   * prifly's own — `ssh` to a Vast.ai box. Run without a shell, as the reader.
+   */
+  terminal?: { title: string; command: string[] } | undefined;
   /** Where clicking the chip leads, in the reader's browser; left out, nowhere. */
   url?: string;
-  /** What the chip's menu offers; left out, it has no menu. */
-  actions?: DecorationAction[];
+  /**
+   * The item's menu, from its ▾ and from a right-click. Choosing one calls
+   * the module's `action` export, or the handler given to `api.onAction`,
+   * with the item's key and the action's id — after asking the reader
+   * `confirm`, when it is not "".
+   */
+  actions?: DecorationAction[] | undefined;
+};
+
+/** A column of a board, in the order the board has them. */
+export type LaunchColumn = { id: string; name: string };
+
+/** The colours a label may wear; see `LABEL_COLOURS` in `@prifly/wire`. */
+export type LabelColour =
+  | "red"
+  | "orange"
+  | "yellow"
+  | "green"
+  | "blue"
+  | "purple"
+  | "pink"
+  | "grey";
+
+/** What an item says about itself at a glance. */
+export type LaunchBadges = {
+  comments?: number;
+  attachments?: number;
+  checklistDone?: number;
+  checklistTotal?: number;
+  /** A date written as the extension would have it read — "24 Sep" — or "". */
+  due?: string;
+  dueDone?: boolean;
+  dueLate?: boolean;
 };
 
 /** One thing a launcher can start a session from: a card, an issue, a ticket. */
@@ -64,7 +112,29 @@ export type LaunchChoice = {
   tone?: DecorationTone;
   /** Picking it asks this first; what is typed reaches `launch` as `input`. */
   input?: { title: string; placeholder?: string };
+  /** Where it lives, for the reader's own browser. */
+  url?: string;
+  /** Label colours, drawn as stripes across the top of the card. */
+  stripes?: LabelColour[];
+  /** Who is on it; the window draws initials. */
+  people?: string[];
+  badges?: LaunchBadges;
 };
+
+/**
+ * What a launcher offers, as a board: the columns, and the items in them.
+ * An extension that answers with a plain array has no columns, and the window
+ * draws a list — which is what a launcher still being set up should give.
+ */
+export type LaunchBoard = {
+  columns: LaunchColumn[];
+  items: LaunchChoice[];
+  /** Things to do to the launcher itself: "Switch board…", "Log out". */
+  actions?: LaunchChoice[];
+};
+
+/** One item, read whole. The body is Markdown; the window draws it. */
+export type LaunchItem = { title: string; url?: string; markdown: string };
 
 /**
  * What a chosen thing becomes: the New session form, filled in — or, with an
@@ -93,12 +163,25 @@ export type ExtensionApi = {
    * items for an id no session has, and `unclaimed`, go to the status bar.
    */
   show(bySession: Record<string, Decoration[]>, unclaimed: Decoration[]): void;
+  /**
+   * Carry out an action the reader chose from an item's right-click menu.
+   * What it returns is shown to them ("Destroyed lc-box1"); what it throws is
+   * shown as the failure. One handler per extension; a second call replaces it.
+   */
+  onAction(handler: (key: string, action: string) => Promise<string> | string): void;
   /** The sessions on this machine the host knows now. */
   sessions(): ExtensionSession[];
   /** A line in the host's log, under `ext.<id>.<event>`. */
   log(event: string, fields?: Record<string, string | number | boolean | null>): void;
   /** The extension's own folder: where it keeps its config. */
   folder: string;
+  /**
+   * The folders its programs are in, first on the PATH of every session
+   * prifly runs: its manifest's `bin`, and the `bin` of the `.venv` prifly
+   * builds from its `pyproject.toml` and `uv.lock` (prifly brings uv and the
+   * Python; the extension ships neither).
+   */
+  paths: readonly string[];
 };
 
 export type ExtensionModule = {
@@ -108,7 +191,14 @@ export type ExtensionModule = {
    * typed. Called on every keystroke's worth of typing, so answer from what is
    * already in hand rather than asking the network each time.
    */
-  choices?: (launchId: string, query: string) => LaunchChoice[] | Promise<LaunchChoice[]>;
+  choices?: (
+    launchId: string,
+    query: string,
+  ) => LaunchChoice[] | LaunchBoard | Promise<LaunchChoice[] | LaunchBoard>;
+  /** One item, written out: its text, its conversation, its pictures. */
+  open?: (launchId: string, key: string) => LaunchItem | Promise<LaunchItem>;
+  /** An item dragged into another column, by that column's `id`. */
+  move?: (launchId: string, key: string, column: string) => void | Promise<void>;
   /** The chosen one, as a session would start from it, with what was typed into its row. */
   launch?: (launchId: string, key: string, input: string) => Launch | Promise<Launch>;
   /**
@@ -116,6 +206,6 @@ export type ExtensionModule = {
    * which session is its. Only for a launch the reader went through with.
    */
   launched?: (launchId: string, key: string, sessionId: string) => void | Promise<void>;
-  /** An item from a chip's menu, by the decoration's `key`. */
-  action?: (key: string, actionId: string) => void | Promise<void>;
+  /** An item from a chip's menu, by the decoration's `key`; what it returns is said to the reader. */
+  action?: (key: string, actionId: string) => string | undefined | Promise<string | undefined>;
 };

@@ -49,12 +49,29 @@ that mean the work is over, drawn in the quiet colour.
 `config.json`, `auth.json`, `state.json` and the downloaded `cards/` are all
 ignored by git: nothing about your account or your board is ever committed.
 
+## The board
+
+*From a Trello card…* opens your board nearly the size of the window, laid out
+the way a board is laid out: a column per list, cards stacked in them, labels
+as coloured stripes, and the small marks that say how much is on a card — due
+date, checklist, comments, attachments — with the members' initials on the
+right. Drawn in prifly's own ink: the arrangement is Trello's, the look is not.
+
+In it you can
+
+- **read a card** — click it, and the description, the checklists, the
+  conversation and the attached pictures open over the board;
+- **move a card** — drag it into another column, or use its right-click menu;
+- **start a session from a card** — the button in the card, its right-click
+  menu, or a double-click on it;
+- **filter** — by title, description, label, member or card id. The columns
+  stay put while the cards thin out, so the board still reads as your board.
+
 ## What it brings
 
-- **A launcher** — your board in its columns, filtered by title, label, member
-  or card id, and the chosen card as a session's first prompt (`index.ts`).
-  Attachments are downloaded to `cards/<card>/`; the prompt says where they are
-  and to look at them.
+- **A launcher** — your board, and the chosen card as a session's first prompt
+  (`index.ts`). Attachments are downloaded to `cards/<card>/`; the prompt says
+  where they are and to look at them.
 - **A chip on the session** — which column the card is in, who is on it, when
   it is due, how much has been said on it. It links to the card, and its menu
   moves the card to any other column on the board.

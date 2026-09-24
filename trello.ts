@@ -28,7 +28,12 @@ export type TrelloCard = {
   dueComplete: boolean;
   labels: { name: string; color: string }[];
   members: { fullName: string; username: string }[];
-  badges: { comments: number; attachments: number };
+  badges: {
+    comments: number;
+    attachments: number;
+    checkItems: number;
+    checkItemsChecked: number;
+  };
 };
 
 export type TrelloComment = { at: string; by: string; text: string };
@@ -165,6 +170,32 @@ export async function download(
   const path = `${into}/${filename}`;
   await Bun.write(path, await response.arrayBuffer());
   return path;
+}
+
+/**
+ * An attachment's bytes, for showing rather than saving.
+ *
+ * Only pictures, and only small ones: they travel to the window inside the
+ * card's text as data, and a 20 MB photograph would be a 27 MB frame on a
+ * socket that also carries the sessions.
+ */
+export async function picture(
+  attachment: TrelloAttachment,
+  creds: Creds,
+  limitBytes: number,
+): Promise<string | null> {
+  if (!attachment.isUpload) return null;
+  const response = await fetch(attachment.url, {
+    headers: {
+      Authorization: `OAuth oauth_consumer_key="${creds.key}", oauth_token="${creds.token}"`,
+    },
+  });
+  if (!response.ok) return null;
+  const type = response.headers.get("content-type") ?? "";
+  if (!type.startsWith("image/")) return null;
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength > limitBytes) return null;
+  return `data:${type};base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
 /** A file name that is only a file name: no folders, no surprises. */
