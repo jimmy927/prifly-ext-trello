@@ -189,6 +189,12 @@ export type Launch = {
   name?: string;
   /** A line for the chooser, whether or not a session follows. */
   message?: string;
+  /**
+   * Pictures for the session's opening message — the screenshots on the card,
+   * carried into the first turn rather than left as paths to open. png, jpeg,
+   * gif or webp, base64, at most twenty.
+   */
+  images?: { mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp"; data: string }[];
 };
 
 /** A session the host knows, for an extension to match its things against. */

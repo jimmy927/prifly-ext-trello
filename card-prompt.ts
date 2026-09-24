@@ -18,6 +18,8 @@ export type PromptParts = {
   files: string[];
   /** Attachments that live somewhere else: named, not fetched. */
   external: { name: string; url: string }[];
+  /** How many of the pictures travel in the message itself. */
+  carried: number;
 };
 
 export function cardPrompt(parts: PromptParts): string {
@@ -70,7 +72,9 @@ function comments(parts: PromptParts): string {
 }
 
 function attachments(parts: PromptParts): string {
-  const saved = parts.files.map((file) => `- ${file}`).join("\n");
+  const saved = parts.files
+    .map((file, at) => `- ${file}${at < parts.carried ? " (in this message)" : ""}`)
+    .join("\n");
   const elsewhere = parts.external
     .map((item) => `- ${item.name}: ${item.url} (not Trello's to serve — fetch it if you need it)`)
     .join("\n");
@@ -88,9 +92,13 @@ function attachments(parts: PromptParts): string {
  * bug actually is.
  */
 function instruction(parts: PromptParts): string {
-  const pictures =
-    parts.files.length === 0
+  const carried =
+    parts.carried === 0
       ? ""
-      : " Read every saved attachment above — the images too, with the Read tool — before you form an opinion; the screenshots are part of the ticket.";
-  return `---\n\nThis session is for that card.${pictures} Start by saying briefly what you take the task to be and what you plan to do; then do it.`;
+      : ` The ${parts.carried === 1 ? "picture is" : `${parts.carried} pictures are`} in this message: look at ${parts.carried === 1 ? "it" : "them"} — a screenshot on a card is usually half of what the card says.`;
+  const rest =
+    parts.files.length > parts.carried
+      ? " The rest are saved beside them; open one with the Read tool when you need it."
+      : "";
+  return `---\n\nThis session is for that card.${carried}${rest} Start by saying briefly what you take the task to be and what you plan to do; then do it.`;
 }

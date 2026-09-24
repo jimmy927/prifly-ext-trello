@@ -32,10 +32,13 @@ import { isSetupKey, runSetup, setupChoices, setupTail } from "./setup";
 import {
   archiveCard,
   type Creds,
+  dataUrl,
   download,
   fullCard,
   moveCard,
-  picture,
+  type Picture,
+  pictureOf,
+  pictureOfFile,
   safeName,
   type TrelloCard,
 } from "./trello";
@@ -156,12 +159,12 @@ export async function open(_launchId: string, key: string): Promise<LaunchItem> 
   for (const attachment of full.attachments) {
     // A picture is carried across so it can be looked at here; anything else
     // — a link to a GitHub issue, a file on a drive — stays where it is.
-    const data = await picture(attachment, auth, PICTURE_LIMIT).catch(() => null);
+    const shot = await pictureOf(attachment, auth, PICTURE_LIMIT).catch(() => null);
     files.push({
       id: attachment.id,
       name: attachment.name,
       url: attachment.isUpload ? "" : attachment.url,
-      data: data ?? "",
+      data: shot === null ? "" : dataUrl(shot),
       at: attachment.at === "" ? "" : shortDate(attachment.at),
     });
   }
@@ -185,6 +188,10 @@ export async function move(_launchId: string, key: string, column: string): Prom
 
 /** Big enough for a screenshot, small enough for a frame on the socket. */
 const PICTURE_LIMIT = 4_000_000;
+
+/** What one opening message will carry: how many pictures, and how much of them. */
+const MOST_PICTURES = 20;
+const PICTURES_LIMIT = 16_000_000;
 
 /** Title, description, labels and members: what a person would search by. */
 function matches(card: TrelloCard, words: string): boolean {
@@ -220,6 +227,19 @@ export async function launch(_launchId: string, key: string, input: string): Pro
   return await cardLaunch(at, key);
 }
 
+/** The picture formats a session can be handed directly. */
+const INLINE = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+
+/**
+ * A card, as a session starts from it: the whole ticket as its first prompt,
+ * every attachment saved beside it, and the pictures handed over with the
+ * message rather than left as paths.
+ *
+ * Both, deliberately. The pictures are in the opening turn because a
+ * screenshot is usually half of what a ticket says and a session that has to
+ * go and open one often does not; the files are on disk because that is how
+ * it looks at one again later, and how it reaches the ones too big to carry.
+ */
 async function cardLaunch(at: World, key: string): Promise<Launch> {
   const auth = creds(at);
   if (auth === null) throw new Error("Not logged in to Trello.");
@@ -227,13 +247,27 @@ async function cardLaunch(at: World, key: string): Promise<Launch> {
   const folder = join(at.api.folder, "cards", safeName(full.card.shortLink));
   const files: string[] = [];
   const external: { name: string; url: string }[] = [];
+  const pictures: Picture[] = [];
+  let carried = 0;
   for (const [index, attachment] of full.attachments.entries()) {
     const filename = `${index + 1}-${safeName(attachment.name)}`;
     const saved = await download(attachment, folder, auth, filename).catch(() => null);
-    if (saved === null) external.push({ name: attachment.name, url: attachment.url });
-    else files.push(saved);
+    if (saved === null) {
+      external.push({ name: attachment.name, url: attachment.url });
+      continue;
+    }
+    files.push(saved);
+    const mediaType = typeOf(saved);
+    // Twenty is the most a turn takes, and a message of tens of megabytes
+    // helps nobody: past either, the file on disk is what is left.
+    if (mediaType === null || pictures.length >= MOST_PICTURES) continue;
+    const picture = await pictureOfFile(saved, mediaType).catch(() => null);
+    if (picture === null) continue;
+    carried += picture.base64.length;
+    if (carried > PICTURES_LIMIT) continue;
+    pictures.push(picture);
   }
-  at.api.log("launch", { card: full.card.shortLink, files: files.length });
+  at.api.log("launch", { card: full.card.shortLink, files: files.length, carried: pictures.length });
   return {
     prompt: cardPrompt({
       full,
@@ -242,10 +276,23 @@ async function cardLaunch(at: World, key: string): Promise<Launch> {
       folder,
       files,
       external,
+      carried: pictures.length,
     }),
     cwd: at.config.cwd,
     name: worktreeName(full.card),
+    images: pictures.map((picture) => ({
+      mediaType: picture.mediaType as "image/png" | "image/jpeg" | "image/gif" | "image/webp",
+      data: picture.base64,
+    })),
   };
+}
+
+/** What a saved file is, by its name; null for anything a turn cannot take. */
+function typeOf(path: string): string | null {
+  const ext = path.toLowerCase().split(".").at(-1) ?? "";
+  const guess = ext === "jpg" ? "jpeg" : ext;
+  const mediaType = `image/${guess}`;
+  return INLINE.has(mediaType) ? mediaType : null;
 }
 
 /** The session that card became: remembered, so the chip finds its row again. */

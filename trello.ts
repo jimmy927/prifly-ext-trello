@@ -200,11 +200,13 @@ export async function download(
  * card's text as data, and a 20 MB photograph would be a 27 MB frame on a
  * socket that also carries the sessions.
  */
-export async function picture(
+export type Picture = { mediaType: string; base64: string };
+
+export async function pictureOf(
   attachment: TrelloAttachment,
   creds: Creds,
   limitBytes: number,
-): Promise<string | null> {
+): Promise<Picture | null> {
   if (!attachment.isUpload) return null;
   const response = await fetch(attachment.url, {
     headers: {
@@ -212,11 +214,21 @@ export async function picture(
     },
   });
   if (!response.ok) return null;
-  const type = response.headers.get("content-type") ?? "";
-  if (!type.startsWith("image/")) return null;
+  const mediaType = (response.headers.get("content-type") ?? "").split(";")[0] ?? "";
+  if (!mediaType.startsWith("image/")) return null;
   const bytes = await response.arrayBuffer();
   if (bytes.byteLength > limitBytes) return null;
-  return `data:${type};base64,${Buffer.from(bytes).toString("base64")}`;
+  return { mediaType, base64: Buffer.from(bytes).toString("base64") };
+}
+
+/** The same picture as a `data:` URI, for prose that has to carry it. */
+export function dataUrl(picture: Picture): string {
+  return `data:${picture.mediaType};base64,${picture.base64}`;
+}
+
+/** A picture, read from a file already on disk. */
+export async function pictureOfFile(path: string, mediaType: string): Promise<Picture> {
+  return { mediaType, base64: Buffer.from(await Bun.file(path).arrayBuffer()).toString("base64") };
 }
 
 /** A file name that is only a file name: no folders, no surprises. */
