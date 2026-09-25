@@ -279,7 +279,7 @@ async function cardLaunch(at: World, key: string): Promise<Launch> {
       carried: pictures.length,
     }),
     cwd: at.config.cwd,
-    name: worktreeName(full.card),
+    name: sessionName(full.card),
     images: pictures.map((picture) => ({
       mediaType: picture.mediaType as "image/png" | "image/jpeg" | "image/gif" | "image/webp",
       data: picture.base64,
@@ -346,20 +346,20 @@ function here(): World {
   return world;
 }
 
-/** A branch git will take, from the card: `gUDHoQtA-the-banner-is-blank`. */
-function worktreeName(card: TrelloCard): string {
-  const words = card.name
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .split("-");
-  // Whole words only: a branch called …-arbetsf helps nobody read the tree.
-  let slug = "";
-  for (const word of words) {
-    if (slug.length + word.length + 1 > 40) break;
-    slug = slug === "" ? word : `${slug}-${word}`;
-  }
-  return slug === "" ? card.shortLink : `${card.shortLink}-${slug}`;
+/**
+ * What the session and its branch are called: the card's own title, with the
+ * card's id in front of it.
+ *
+ * Not a slug. prifly makes the folder and the branch from this (`worktreeSlug`
+ * in its wire) and keeps the readable text as the session's name — and it
+ * knows how to fold "När" into `nar`, which a hand-rolled one here did not:
+ * it gave `n-r-kandidater`, cutting every Swedish word in half (2026-09-25).
+ */
+function sessionName(card: TrelloCard): string {
+  // Cut, because a Trello title runs to a paragraph and this is what the
+  // sidebar row says. The id goes first so the row names the card even when
+  // the words run out.
+  return `${card.shortLink} ${short(card.name, 60)}`;
 }
 
 function short(text: string, max: number): string {
