@@ -347,19 +347,20 @@ function here(): World {
 }
 
 /**
- * What the session and its branch are called: the card's own title, with the
- * card's id in front of it.
+ * What the session and its branch are called: the card's title, cut to what a
+ * sidebar row can show.
  *
- * Not a slug. prifly makes the folder and the branch from this (`worktreeSlug`
- * in its wire) and keeps the readable text as the session's name — and it
- * knows how to fold "När" into `nar`, which a hand-rolled one here did not:
- * it gave `n-r-kandidater`, cutting every Swedish word in half (2026-09-25).
+ * The title and nothing else. A card's id in front of it — `iAUMPITJ På
+ * Response-searchlistan…` — is eight characters of noise on every row and at
+ * the head of every branch name, and it buys nothing: the card rides on the
+ * session's banner with a link, and its URL is the second line of the prompt.
+ *
+ * Not a slug, either. prifly makes the folder and the branch from this
+ * (`worktreeSlug` in its wire), and it knows how to fold "På" into `pa` —
+ * which a hand-rolled one here did not, cutting Swedish words in half.
  */
 function sessionName(card: TrelloCard): string {
-  // Cut, because a Trello title runs to a paragraph and this is what the
-  // sidebar row says. The id goes first so the row names the card even when
-  // the words run out.
-  return `${card.shortLink} ${short(card.name, 60)}`;
+  return short(card.name, 60);
 }
 
 function short(text: string, max: number): string {
