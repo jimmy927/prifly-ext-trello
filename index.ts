@@ -110,9 +110,15 @@ function chip(card: TrelloCard, at: World): Decoration {
     ].filter((line) => line !== ""),
     url: card.url,
     // Every other list on the board: moving a card is a click, not a turn.
-    actions: at.lists
-      .filter((entry) => entry.id !== card.idList)
-      .map((entry) => ({ id: `move:${entry.id}`, label: `Move to ${entry.name}` })),
+    // Then the same ignoring the board's card menu offers.
+    actions: [
+      ...at.lists
+        .filter((entry) => entry.id !== card.idList)
+        .map((entry) => ({ id: `move:${entry.id}`, label: `Move to ${entry.name}` })),
+      at.state.ignored.includes(card.shortLink)
+        ? { id: "unignore", label: "Show on the board again" }
+        : { id: "ignore", label: "Never start a session from this" },
+    ],
   };
 }
 
