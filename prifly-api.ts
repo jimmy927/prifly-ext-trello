@@ -121,6 +121,8 @@ export type LaunchChoice = {
   /** Who is on it; the window draws initials. */
   people?: string[];
   badges?: LaunchBadges;
+  /** A session was already started from it; the board tints the card. */
+  started?: boolean;
 };
 
 /**

@@ -151,23 +151,20 @@ export async function choices(_launchId: string, query: string): Promise<LaunchC
   };
 }
 
-/** Drawn in front of the title of a card that is already a session. */
-const IN_SESSION = "● ";
-
 /**
  * A card that has already become a session, marked as one.
  *
  * Nearly always a card is started once: the second pick is a slip, and the
- * two sessions then share a chip and a ticket without knowing it. So the card
- * says so on its face, and picking it asks first — typing anything into that
- * row starts another session anyway, for the times that is what is wanted.
+ * two sessions then share a chip and a ticket without knowing it. So the board
+ * tints the card, and picking it asks first — typing anything into that row
+ * starts another session anyway, for the times that is what is wanted.
  */
 function imported(face: LaunchChoice, sessions: ExtensionSession[]): LaunchChoice {
   if (sessions.length === 0) return face;
   const names = sessions.map((session) => `“${short(session.title, 50)}”`).join(", ");
   return {
     ...face,
-    title: `${IN_SESSION}${face.title}`,
+    started: true,
     detail: `Already a session: ${names}`,
     input: {
       title: `Already a session: ${names}. Type “again” to start another one anyway.`,
