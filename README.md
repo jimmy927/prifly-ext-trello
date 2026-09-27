@@ -62,6 +62,10 @@ In it you can
 - **read a card** — click it, and the description, the checklists, the
   conversation and the attached pictures open over the board;
 - **move a card** — drag it into another column, or use its right-click menu;
+- **ignore a card** — "Never start a session from this" in its right-click
+  menu takes a card that is not software work off the board for good. "Show
+  ignored cards" at the end of the board lists them, and "Show on the board
+  again" in their menu brings one back. Kept in `state.json`;
 - **start a session from a card** — the button in the card, its right-click
   menu, or a double-click on it;
 - **filter** — by title, description, label, member or card id. The columns

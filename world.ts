@@ -35,6 +35,11 @@ export type State = {
   boardName: string;
   /** Which card each session was started from. */
   links: Record<string, string>;
+  /**
+   * Cards the reader said never to start a session from, by short link: not
+   * software work at all. Left off the board, and listed on their own.
+   */
+  ignored: string[];
 };
 
 export type World = {
@@ -44,6 +49,8 @@ export type World = {
   state: State;
   lists: TrelloList[];
   cards: TrelloCard[];
+  /** The board shows the ignored cards instead of the rest, until switched back. */
+  showIgnored: boolean;
 };
 
 /** The two halves of a Trello call, when both are in hand. */
@@ -65,6 +72,7 @@ export async function load(api: ExtensionApi): Promise<World> {
     state: await readState(api.folder),
     lists: [],
     cards: [],
+    showIgnored: false,
   };
 }
 
@@ -104,7 +112,12 @@ export async function readState(folder: string): Promise<State> {
   const raw = (await Bun.file(join(folder, "state.json"))
     .json()
     .catch(() => ({}))) as Partial<State>;
-  return { board: raw.board ?? "", boardName: raw.boardName ?? "", links: raw.links ?? {} };
+  return {
+    board: raw.board ?? "",
+    boardName: raw.boardName ?? "",
+    links: raw.links ?? {},
+    ignored: raw.ignored ?? [],
+  };
 }
 
 export async function writeState(folder: string, state: State): Promise<void> {

@@ -137,18 +137,52 @@ export async function choices(_launchId: string, query: string): Promise<LaunchC
   if (setup !== null) return setup;
   if (at.cards.length === 0) await reload(at);
   const words = query.trim().toLowerCase();
+  const ignored = new Set(at.state.ignored);
   return {
     columns: at.lists.map((list) => ({ id: list.id, name: list.name })),
     items: at.cards
+      // The board, or — when the reader asked for them — only the ignored.
+      .filter((card) => ignored.has(card.shortLink) === at.showIgnored)
       .filter((card) => matches(card, words))
       .map((card) =>
-        imported(
-          cardFace(card, tone(card, listName(at, card.idList), at.config)),
-          sessionsOf(at, card.shortLink),
+        ignorable(
+          imported(
+            cardFace(card, tone(card, listName(at, card.idList), at.config)),
+            sessionsOf(at, card.shortLink),
+          ),
+          ignored.has(card.shortLink),
         ),
       ),
-    actions: setupTail(at),
+    actions: [ignoredRow(at), ...setupTail(at)],
   };
+}
+
+/** The row at the end of the board that switches to the ignored cards, and back. */
+const SHOW_IGNORED = "view:ignored";
+
+function ignoredRow(at: World): LaunchChoice {
+  const onBoard = new Set(at.cards.map((card) => card.shortLink));
+  const count = at.state.ignored.filter((shortLink) => onBoard.has(shortLink)).length;
+  return at.showIgnored
+    ? { key: SHOW_IGNORED, title: "Back to the board", group: "prifly", tone: "muted" }
+    : {
+        key: SHOW_IGNORED,
+        title: `Show ignored cards (${count})`,
+        group: "prifly",
+        detail: "Cards you said never to start a session from.",
+        tone: "muted",
+      };
+}
+
+/**
+ * A card's menu gains the way to say it is not software work — "Never start a
+ * session from this" — or, on an ignored one, the way to take that back.
+ */
+function ignorable(face: LaunchChoice, ignored: boolean): LaunchChoice {
+  const action = ignored
+    ? { id: "unignore", label: "Show on the board again" }
+    : { id: "ignore", label: "Never start a session from this" };
+  return { ...face, actions: [action, ...(face.actions ?? [])] };
 }
 
 /**
@@ -247,6 +281,10 @@ function matches(card: TrelloCard, words: string): boolean {
  */
 export async function launch(_launchId: string, key: string, input: string): Promise<Launch> {
   const at = here();
+  if (key === SHOW_IGNORED) {
+    at.showIgnored = !at.showIgnored;
+    return { prompt: "", message: at.showIgnored ? "Showing the ignored cards." : "" };
+  }
   if (isSetupKey(key)) {
     const done = await runSetup(at, key, input);
     if (done !== null) {
@@ -370,6 +408,15 @@ async function carryOut(
   actionId: string,
   name: string,
 ): Promise<string> {
+  if (actionId === "ignore" || actionId === "unignore") {
+    const rest = at.state.ignored.filter((shortLink) => shortLink !== key);
+    at.state.ignored = actionId === "ignore" ? [...rest, key] : rest;
+    await writeState(at.api.folder, at.state);
+    at.api.log(actionId === "ignore" ? "ignored" : "unignored", { card: key });
+    return actionId === "ignore"
+      ? `“${name}” is off the board. “Show ignored cards” at the end brings it back.`
+      : `“${name}” is back on the board.`;
+  }
   if (actionId === "archive") {
     await archiveCard(key, auth);
     at.api.log("archived", { card: key });
