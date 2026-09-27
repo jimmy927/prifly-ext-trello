@@ -22,6 +22,7 @@ import type {
   Decoration,
   DecorationTone,
   ExtensionApi,
+  ExtensionSession,
   Launch,
   LaunchBoard,
   LaunchChoice,
@@ -140,9 +141,44 @@ export async function choices(_launchId: string, query: string): Promise<LaunchC
     columns: at.lists.map((list) => ({ id: list.id, name: list.name })),
     items: at.cards
       .filter((card) => matches(card, words))
-      .map((card) => cardFace(card, tone(card, listName(at, card.idList), at.config))),
+      .map((card) =>
+        imported(
+          cardFace(card, tone(card, listName(at, card.idList), at.config)),
+          sessionsOf(at, card.shortLink),
+        ),
+      ),
     actions: setupTail(at),
   };
+}
+
+/** Drawn in front of the title of a card that is already a session. */
+const IN_SESSION = "● ";
+
+/**
+ * A card that has already become a session, marked as one.
+ *
+ * Nearly always a card is started once: the second pick is a slip, and the
+ * two sessions then share a chip and a ticket without knowing it. So the card
+ * says so on its face, and picking it asks first — typing anything into that
+ * row starts another session anyway, for the times that is what is wanted.
+ */
+function imported(face: LaunchChoice, sessions: ExtensionSession[]): LaunchChoice {
+  if (sessions.length === 0) return face;
+  const names = sessions.map((session) => `“${short(session.title, 50)}”`).join(", ");
+  return {
+    ...face,
+    title: `${IN_SESSION}${face.title}`,
+    detail: `Already a session: ${names}`,
+    input: {
+      title: `Already a session: ${names}. Type “again” to start another one anyway.`,
+      placeholder: "again",
+    },
+  };
+}
+
+/** The sessions on this machine that were started from this card. */
+function sessionsOf(at: World, shortLink: string): ExtensionSession[] {
+  return at.api.sessions().filter((session) => at.state.links[session.id] === shortLink);
 }
 
 function listName(at: World, id: string): string {
@@ -223,6 +259,17 @@ export async function launch(_launchId: string, key: string, input: string): Pro
       } else at.api.show({}, []);
       return done;
     }
+  }
+  // Nothing typed means the card was picked without being asked — the Start
+  // button of a card opened for reading. A card that is already a session is
+  // started again only when the reader answered the row that asks.
+  const already = sessionsOf(at, key);
+  if (already.length > 0 && input === "") {
+    const name = at.cards.find((card) => card.shortLink === key)?.name ?? "This card";
+    return {
+      prompt: "",
+      message: `“${short(name, 60)}” is already a session: “${already[0]?.title ?? ""}”. Pick it on the board to start another one anyway.`,
+    };
   }
   return await cardLaunch(at, key);
 }

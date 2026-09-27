@@ -93,6 +93,12 @@ is kept in `state.json` here. A card therefore belongs to the session that was
 started from it — nothing else claims a card, and an existing session cannot be
 adopted by one.
 
+A card is normally started once, so a card that already has a session wears a
+● in front of its title on the board, and picking it asks first: type "again"
+(or anything) into the row that appears to start a second session anyway. The
+Start button of a card opened for reading only says which session it already
+is. Once that session is deleted, the card is plain again.
+
 ## Writing an extension
 
 An extension is a folder with a `prifly-extension.json` manifest;
