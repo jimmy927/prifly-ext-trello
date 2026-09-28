@@ -96,7 +96,7 @@ function chip(card: TrelloCard, at: World): Decoration {
   const name = list?.name ?? "";
   return {
     key: card.shortLink,
-    icon: "link",
+    icon: "trello",
     label: `${name === "" ? "" : `${name}: `}${short(card.name, 40)}`,
     tone: tone(card, name, at.config),
     details: [

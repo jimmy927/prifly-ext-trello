@@ -9,7 +9,7 @@
     {
       "id": "card",
       "label": "From a Trello card…",
-      "icon": "link",
+      "icon": "trello",
       "description": "Your board. Logging in and choosing which board live here too. The session starts knowing the whole card: description, comments, checklists and every attached picture.",
       "searchPlaceholder": "Filter by title, label, member or card id…"
     }
