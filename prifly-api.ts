@@ -246,8 +246,18 @@ export type ExtensionModule = {
   open?: (launchId: string, key: string) => LaunchItem | Promise<LaunchItem>;
   /** An item dragged into another column, by that column's `id`. */
   move?: (launchId: string, key: string, column: string) => void | Promise<void>;
-  /** The chosen one, as a session would start from it, with what was typed into its row. */
-  launch?: (launchId: string, key: string, input: string) => Launch | Promise<Launch>;
+  /**
+   * The chosen one, as a session would start from it, with what was typed into
+   * its row. `again` is true when the reader asked for it from a session that
+   * was already started from this item — another one, on purpose. A prifly
+   * from before 2026-09-29 passes no `how` at all.
+   */
+  launch?: (
+    launchId: string,
+    key: string,
+    input: string,
+    how?: { again: boolean },
+  ) => Launch | Promise<Launch>;
   /**
    * The session that launch became, once it is running — where a card learns
    * which session is its. Only for a launch the reader went through with.

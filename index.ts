@@ -137,7 +137,10 @@ function tone(card: TrelloCard, list: string, config: Config): DecorationTone {
  * The columns stay when a filter empties them: a board with its columns
  * missing is not the board the reader knows.
  */
-export async function choices(_launchId: string, query: string): Promise<LaunchChoice[] | LaunchBoard> {
+export async function choices(
+  _launchId: string,
+  query: string,
+): Promise<LaunchChoice[] | LaunchBoard> {
   const at = here();
   const setup = await setupChoices(at);
   if (setup !== null) return setup;
@@ -285,7 +288,12 @@ function matches(card: TrelloCard, words: string): boolean {
  * The whole card, as a session's first prompt, with its pictures on disk —
  * or, for one of the setup rows, a step taken and no session at all.
  */
-export async function launch(_launchId: string, key: string, input: string): Promise<Launch> {
+export async function launch(
+  _launchId: string,
+  key: string,
+  input: string,
+  how?: { again: boolean },
+): Promise<Launch> {
   const at = here();
   if (key === SHOW_IGNORED) {
     at.showIgnored = !at.showIgnored;
@@ -303,9 +311,11 @@ export async function launch(_launchId: string, key: string, input: string): Pro
   }
   // Nothing typed means the card was picked without being asked — the Start
   // button of a card opened for reading. A card that is already a session is
-  // started again only when the reader answered the row that asks.
+  // started again only when the reader answered the row that asks, or chose
+  // "New session from this card…" on one of its sessions — the card then
+  // stays linked to both (`launched`).
   const already = sessionsOf(at, key);
-  if (already.length > 0 && input === "") {
+  if (already.length > 0 && input === "" && how?.again !== true) {
     const name = at.cards.find((card) => card.shortLink === key)?.name ?? "This card";
     return {
       prompt: "",
@@ -355,7 +365,11 @@ async function cardLaunch(at: World, key: string): Promise<Launch> {
     if (carried > PICTURES_LIMIT) continue;
     pictures.push(picture);
   }
-  at.api.log("launch", { card: full.card.shortLink, files: files.length, carried: pictures.length });
+  at.api.log("launch", {
+    card: full.card.shortLink,
+    files: files.length,
+    carried: pictures.length,
+  });
   return {
     prompt: cardPrompt({
       full,
