@@ -17,6 +17,7 @@
 
 import { join } from "node:path";
 import { cardFace, cardItem, shortDate } from "./card-face";
+import { LINK_PREFIX, linkActions, withLinks } from "./link-actions";
 import { cardPrompt } from "./card-prompt";
 import type {
   Decoration,
@@ -154,12 +155,15 @@ export async function choices(
       .filter((card) => ignored.has(card.shortLink) === at.showIgnored)
       .filter((card) => matches(card, words))
       .map((card) =>
-        ignorable(
-          imported(
-            cardFace(card, tone(card, listName(at, card.idList), at.config)),
-            sessionsOf(at, card.shortLink),
+        linkable(
+          ignorable(
+            imported(
+              cardFace(card, tone(card, listName(at, card.idList), at.config)),
+              sessionsOf(at, card.shortLink),
+            ),
+            ignored.has(card.shortLink),
           ),
-          ignored.has(card.shortLink),
+          at,
         ),
       ),
     actions: [ignoredRow(at), ...setupTail(at)],
@@ -192,6 +196,17 @@ function ignorable(face: LaunchChoice, ignored: boolean): LaunchChoice {
     ? { id: "unignore", label: "Show on the board again" }
     : { id: "ignore", label: "Never start a session from this" };
   return { ...face, actions: [action, ...(face.actions ?? [])] };
+}
+
+/**
+ * A card that already has a session can be linked to it: the menu offers the
+ * recent ones, just before the destructive "Archive card".
+ */
+function linkable(face: LaunchChoice, at: World): LaunchChoice {
+  const links = linkActions(at.api.sessions(), at.state.links, face.key);
+  return links.length === 0
+    ? face
+    : { ...face, actions: withLinks(face.actions ?? [], links) };
 }
 
 /**
@@ -436,6 +451,16 @@ async function carryOut(
     return actionId === "ignore"
       ? `“${name}” is off the board. “Show ignored cards” at the end brings it back.`
       : `“${name}” is back on the board.`;
+  }
+  if (actionId.startsWith(LINK_PREFIX)) {
+    const sessionId = actionId.slice(LINK_PREFIX.length);
+    // Keyed by session, so a session on another card moves to this one.
+    at.state.links[sessionId] = key;
+    await writeState(at.api.folder, at.state);
+    show();
+    at.api.log("linked", { card: key, session: sessionId.slice(0, 8) });
+    const title = at.api.sessions().find((session) => session.id === sessionId)?.title;
+    return `Linked to ${title ?? sessionId.slice(0, 8)}`;
   }
   if (actionId === "archive") {
     await archiveCard(key, auth);
