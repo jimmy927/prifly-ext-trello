@@ -12,8 +12,8 @@ import { join } from "node:path";
 import type { Session } from "./auth";
 import { readSession } from "./auth";
 import type { ExtensionApi } from "./prifly-api";
-import { board as boardOf, cards as cardsOf, type Creds, lists as listsOf } from "./trello";
 import type { TrelloCard, TrelloList } from "./trello";
+import { board as boardOf, type Creds, cards as cardsOf, lists as listsOf } from "./trello";
 
 export type Config = {
   /**
@@ -33,8 +33,8 @@ export type State = {
   /** The board the reader chose, by id; "" until they have. */
   board: string;
   boardName: string;
-  /** Which card each session was started from. */
-  links: Record<string, string>;
+  /** The cards (by short link) each session was started from or linked to, oldest first. */
+  links: Record<string, string[]>;
   /**
    * Cards the reader said never to start a session from, by short link: not
    * software work at all. Left off the board, and listed on their own.
@@ -115,11 +115,41 @@ export async function readState(folder: string): Promise<State> {
   return {
     board: raw.board ?? "",
     boardName: raw.boardName ?? "",
-    links: raw.links ?? {},
+    links: cardLists(raw.links),
     ignored: raw.ignored ?? [],
   };
 }
 
 export async function writeState(folder: string, state: State): Promise<void> {
   await Bun.write(join(folder, "state.json"), JSON.stringify(state, null, 2));
+}
+
+/**
+ * Each session's card short links. A `state.json` from before a session could
+ * carry several cards holds one short link as a string; it is read as a list
+ * of one.
+ */
+export function cardLists(raw: unknown): Record<string, string[]> {
+  const kept: Record<string, string[]> = {};
+  if (typeof raw !== "object" || raw === null) return kept;
+  for (const [session, value] of Object.entries(raw)) {
+    const ids = (Array.isArray(value) ? value : [value]).filter(
+      (id): id is string => typeof id === "string" && id !== "",
+    );
+    if (ids.length > 0) kept[session] = [...new Set(ids)];
+  }
+  return kept;
+}
+
+/** The card added to the session's, once; the ones it already carries stay. */
+export function linkCard(state: State, sessionId: string, shortLink: string): void {
+  const cards = state.links[sessionId] ?? [];
+  if (!cards.includes(shortLink)) state.links[sessionId] = [...cards, shortLink];
+}
+
+/** The card taken off the session; a session left with none is forgotten. */
+export function unlinkCard(state: State, sessionId: string, shortLink: string): void {
+  const cards = (state.links[sessionId] ?? []).filter((card) => card !== shortLink);
+  if (cards.length === 0) delete state.links[sessionId];
+  else state.links[sessionId] = cards;
 }

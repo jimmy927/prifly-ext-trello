@@ -17,10 +17,12 @@
 
 import { join } from "node:path";
 import { cardFace, cardItem, shortDate } from "./card-face";
-import { LINK_PREFIX, linkActions, withLinks } from "./link-actions";
 import { cardPrompt } from "./card-prompt";
+import { LINK_ACTION, withLink } from "./link-actions";
 import type {
+  ActionPicked,
   Decoration,
+  DecorationAction,
   DecorationTone,
   ExtensionApi,
   ExtensionSession,
@@ -44,7 +46,17 @@ import {
   safeName,
   type TrelloCard,
 } from "./trello";
-import { type Config, creds, load, ready, reload, type World, writeState } from "./world";
+import {
+  type Config,
+  creds,
+  linkCard,
+  load,
+  ready,
+  reload,
+  unlinkCard,
+  type World,
+  writeState,
+} from "./world";
 
 let world: World | null = null;
 
@@ -76,18 +88,23 @@ export async function activate(api: ExtensionApi): Promise<() => void> {
   };
 }
 
-/** The chips: one card on the session that was started from it. */
+/** The chips: one per card the session was started from or linked to. */
 function show(): void {
   const at = here();
   const bySession: Record<string, Decoration[]> = {};
   const byShortLink = new Map(at.cards.map((card) => [card.shortLink, card]));
   const known = new Set(at.api.sessions().map((session) => session.id));
-  for (const [sessionId, shortLink] of Object.entries(at.state.links)) {
-    const card = byShortLink.get(shortLink);
-    // A card that left the board — archived, or moved to another one — stops
-    // being drawn; the link stays, in case it comes back.
-    if (card === undefined || !known.has(sessionId)) continue;
-    bySession[sessionId] = [chip(card, at)];
+  for (const [sessionId, shortLinks] of Object.entries(at.state.links)) {
+    if (!known.has(sessionId)) continue;
+    const chips = shortLinks.flatMap((shortLink) => {
+      const card = byShortLink.get(shortLink);
+      // A card that left the board — archived, or moved to another one — stops
+      // being drawn; the link stays, in case it comes back.
+      if (card === undefined) return [];
+      const face = chip(card, at);
+      return [{ ...face, actions: [...(face.actions ?? []), unlinkAction(sessionId)] }];
+    });
+    if (chips.length > 0) bySession[sessionId] = chips;
   }
   at.api.show(bySession, []);
 }
@@ -163,7 +180,6 @@ export async function choices(
             ),
             ignored.has(card.shortLink),
           ),
-          at,
         ),
       ),
     actions: [ignoredRow(at), ...setupTail(at)],
@@ -199,14 +215,11 @@ function ignorable(face: LaunchChoice, ignored: boolean): LaunchChoice {
 }
 
 /**
- * A card that already has a session can be linked to it: the menu offers the
- * recent ones, just before the destructive "Archive card".
+ * A card can be linked to a session: "Link to session…", just before the
+ * destructive "Archive card", opens prifly's session picker.
  */
-function linkable(face: LaunchChoice, at: World): LaunchChoice {
-  const links = linkActions(at.api.sessions(), at.state.links, face.key);
-  return links.length === 0
-    ? face
-    : { ...face, actions: withLinks(face.actions ?? [], links) };
+function linkable(face: LaunchChoice): LaunchChoice {
+  return { ...face, actions: withLink(face.actions ?? [], LINK_ACTION) };
 }
 
 /**
@@ -233,7 +246,9 @@ function imported(face: LaunchChoice, sessions: ExtensionSession[]): LaunchChoic
 
 /** The sessions on this machine that were started from this card. */
 function sessionsOf(at: World, shortLink: string): ExtensionSession[] {
-  return at.api.sessions().filter((session) => at.state.links[session.id] === shortLink);
+  return at.api
+    .sessions()
+    .filter((session) => at.state.links[session.id]?.includes(shortLink) === true);
 }
 
 function listName(at: World, id: string): string {
@@ -415,7 +430,7 @@ function typeOf(path: string): string | null {
 /** The session that card became: remembered, so the chip finds its row again. */
 export async function launched(_launchId: string, key: string, sessionId: string): Promise<void> {
   const at = here();
-  at.state.links[sessionId] = key;
+  linkCard(at.state, sessionId, key);
   await writeState(at.api.folder, at.state);
   show();
 }
@@ -425,12 +440,16 @@ export async function launched(_launchId: string, key: string, sessionId: string
  * the card on the board. The board is read again afterwards, so an archived
  * card is simply not there any more.
  */
-export async function action(key: string, actionId: string): Promise<string> {
+export async function action(
+  key: string,
+  actionId: string,
+  picked?: ActionPicked,
+): Promise<string> {
   const at = here();
   const auth = creds(at);
   if (auth === null) throw new Error("Not logged in to Trello.");
   const name = at.cards.find((card) => card.shortLink === key)?.name ?? "The card";
-  const done = await carryOut(at, auth, key, actionId, name);
+  const done = await carryOut(at, auth, key, actionId, name, picked);
   await reload(at);
   show();
   return done;
@@ -442,6 +461,7 @@ async function carryOut(
   key: string,
   actionId: string,
   name: string,
+  picked?: ActionPicked,
 ): Promise<string> {
   if (actionId === "ignore" || actionId === "unignore") {
     const rest = at.state.ignored.filter((shortLink) => shortLink !== key);
@@ -452,16 +472,13 @@ async function carryOut(
       ? `“${name}” is off the board. “Show ignored cards” at the end brings it back.`
       : `“${name}” is back on the board.`;
   }
-  if (actionId.startsWith(LINK_PREFIX)) {
-    const sessionId = actionId.slice(LINK_PREFIX.length);
-    // Keyed by session, so a session on another card moves to this one.
-    at.state.links[sessionId] = key;
-    await writeState(at.api.folder, at.state);
-    show();
-    at.api.log("linked", { card: key, session: sessionId.slice(0, 8) });
-    const title = at.api.sessions().find((session) => session.id === sessionId)?.title;
-    return `Linked to ${title ?? sessionId.slice(0, 8)}`;
+  if (actionId === LINK_ACTION.id) {
+    // A prifly without the session picker calls this with nothing picked.
+    if (picked === undefined) throw new Error("This prifly cannot pick a session yet: update it.");
+    return await link(at, key, picked.sessionId);
   }
+  if (actionId.startsWith(UNLINK_PREFIX))
+    return await unlink(at, key, actionId.slice(UNLINK_PREFIX.length), name);
   if (actionId === "archive") {
     await archiveCard(key, auth);
     at.api.log("archived", { card: key });
@@ -475,6 +492,34 @@ async function carryOut(
     return `Moved “${name}” to ${list}.`;
   }
   throw new Error(`Nothing to do for ${actionId}`);
+}
+
+/** The chip's menu id prefix for taking it off its session; the full session id follows. */
+const UNLINK_PREFIX = "unlink:";
+
+/** Only removes the link: the card itself is left alone in Trello. */
+function unlinkAction(sessionId: string): DecorationAction {
+  return { id: `${UNLINK_PREFIX}${sessionId}`, label: "Unlink from this session" };
+}
+
+/** A session that was not started from the card, given its chip anyway — beside the ones it has. */
+async function link(at: World, key: string, sessionId: string): Promise<string> {
+  linkCard(at.state, sessionId, key);
+  await writeState(at.api.folder, at.state);
+  show();
+  at.api.log("linked", { card: key, session: sessionId.slice(0, 8) });
+  const title = at.api.sessions().find((session) => session.id === sessionId)?.title;
+  return `Linked to ${title ?? sessionId.slice(0, 8)}`;
+}
+
+/** A link made by mistake, undone from the chip: the card itself is left alone in Trello. */
+async function unlink(at: World, key: string, sessionId: string, name: string): Promise<string> {
+  unlinkCard(at.state, sessionId, key);
+  await writeState(at.api.folder, at.state);
+  show();
+  at.api.log("unlinked", { card: key, session: sessionId.slice(0, 8) });
+  const title = at.api.sessions().find((session) => session.id === sessionId)?.title;
+  return `Unlinked “${name}” from ${title ?? sessionId.slice(0, 8)}.`;
 }
 
 function here(): World {
