@@ -32,6 +32,7 @@ import type {
   LaunchItem,
   LaunchItemFile,
 } from "./prifly-api";
+import { knownSessions, linkedSessions, sessionById } from "./session-lookup";
 import { isSetupKey, runSetup, setupChoices, setupTail } from "./setup";
 import {
   archiveCard,
@@ -93,9 +94,9 @@ function show(): void {
   const at = here();
   const bySession: Record<string, Decoration[]> = {};
   const byShortLink = new Map(at.cards.map((card) => [card.shortLink, card]));
-  const known = new Set(at.api.sessions().map((session) => session.id));
+  const known = knownSessions(at.api);
   for (const [sessionId, shortLinks] of Object.entries(at.state.links)) {
-    if (!known.has(sessionId)) continue;
+    if (!known(sessionId)) continue;
     const chips = shortLinks.flatMap((shortLink) => {
       const card = byShortLink.get(shortLink);
       // A card that left the board — archived, or moved to another one — stops
@@ -246,9 +247,7 @@ function imported(face: LaunchChoice, sessions: ExtensionSession[]): LaunchChoic
 
 /** The sessions on this machine that were started from this card. */
 function sessionsOf(at: World, shortLink: string): ExtensionSession[] {
-  return at.api
-    .sessions()
-    .filter((session) => at.state.links[session.id]?.includes(shortLink) === true);
+  return linkedSessions(at.api, at.state.links, shortLink);
 }
 
 function listName(at: World, id: string): string {
@@ -508,7 +507,7 @@ async function link(at: World, key: string, sessionId: string): Promise<string> 
   await writeState(at.api.folder, at.state);
   show();
   at.api.log("linked", { card: key, session: sessionId.slice(0, 8) });
-  const title = at.api.sessions().find((session) => session.id === sessionId)?.title;
+  const title = sessionById(at.api, sessionId)?.title;
   return `Linked to ${title ?? sessionId.slice(0, 8)}`;
 }
 
@@ -518,7 +517,7 @@ async function unlink(at: World, key: string, sessionId: string, name: string): 
   await writeState(at.api.folder, at.state);
   show();
   at.api.log("unlinked", { card: key, session: sessionId.slice(0, 8) });
-  const title = at.api.sessions().find((session) => session.id === sessionId)?.title;
+  const title = sessionById(at.api, sessionId)?.title;
   return `Unlinked “${name}” from ${title ?? sessionId.slice(0, 8)}.`;
 }
 

@@ -228,8 +228,15 @@ export type ExtensionApi = {
   onAction(
     handler: (key: string, action: string, picked?: ActionPicked) => Promise<string> | string,
   ): void;
-  /** The sessions on this machine the host knows now. */
+  /**
+   * What this prifly accepts beyond the first version, by name, e.g.
+   * "session-lookup". Absent on a prifly that predates the list.
+   */
+  features?: readonly string[];
+  /** The sessions in the sidebar now: running, and the last hours of history. An older one is looked up with `session`. */
   sessions(): ExtensionSession[];
+  /** One session by its full id, however old: the sidebar's, else the history index's as "ended"; null when unknown. Offered when `features` has "session-lookup". */
+  session?(id: string): ExtensionSession | null;
   /** A line in the host's log, under `ext.<id>.<event>`. */
   log(event: string, fields?: Record<string, string | number | boolean | null>): void;
   /** The extension's own folder: where it keeps its config. */
