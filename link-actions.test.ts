@@ -1,43 +1,16 @@
 import { expect, test } from "bun:test";
-import { linkActions, withLinks } from "./link-actions";
+import { LINK_ACTION, withLink } from "./link-actions";
 
-const session = (id: string, state = "running") => ({ id, title: `Title ${id}`, cwd: "/x", state });
-
-test("offers at most four, in list order", () => {
-  const all = ["a", "b", "c", "d", "e", "f"].map((id) => session(id));
-  const actions = linkActions(all, {}, "CARD");
-  expect(actions.map((a) => a.id)).toEqual(["link:a", "link:b", "link:c", "link:d"]);
-  expect(actions[0]).toEqual({
-    id: "link:a",
-    label: "Link to session: Title a",
-    confirm: "",
-    destructive: false,
-    disabled: false,
-  });
+test("the link row opens the session picker", () => {
+  expect(LINK_ACTION).toEqual({ id: "link", label: "Link to session…", pick: "session" });
 });
 
-test("skips ended sessions", () => {
-  const actions = linkActions([session("a", "ended"), session("b"), session("c", "ended")], {}, "CARD");
-  expect(actions.map((a) => a.id)).toEqual(["link:b"]);
+test("the link row goes before archive", () => {
+  const menu = withLink([{ id: "ignore" }, { id: "archive" }], { id: "link" });
+  expect(menu.map((a) => a.id)).toEqual(["ignore", "link", "archive"]);
 });
 
-test("skips sessions already on this card but not those on another", () => {
-  const links = { a: "CARD", b: "OTHER" };
-  const actions = linkActions([session("a"), session("b")], links, "CARD");
-  expect(actions.map((a) => a.id)).toEqual(["link:b"]);
-});
-
-test("the four are counted after the skips", () => {
-  const all = [session("x", "ended"), session("a"), session("b"), session("c"), session("d"), session("e")];
-  expect(linkActions(all, { a: "CARD" }, "CARD").map((a) => a.id)).toEqual([
-    "link:b",
-    "link:c",
-    "link:d",
-    "link:e",
-  ]);
-});
-
-test("links go before archive", () => {
-  const menu = withLinks([{ id: "ignore" }, { id: "archive" }], [{ id: "link:a" }]);
-  expect(menu.map((a) => a.id)).toEqual(["ignore", "link:a", "archive"]);
+test("the link row goes last when there is no archive row", () => {
+  const menu = withLink([{ id: "ignore" }], { id: "link" });
+  expect(menu.map((a) => a.id)).toEqual(["ignore", "link"]);
 });
