@@ -37,14 +37,16 @@ the same idea as the GitHub CLI's client id.
 This repository ships no key, so `config.json` here holds one:
 
 ```json
-{ "appKey": "…", "cwd": "", "done": ["Done"], "refreshSeconds": 60 }
+{ "appKey": "…", "cwd": "", "done": ["Done"], "inProgress": "In Progress", "refreshSeconds": 60 }
 ```
 
 Make one at [trello.com/power-ups/admin](https://trello.com/power-ups/admin) —
 new Power-Up, then the API key tab — or paste it into the first row the chooser
 offers when there is none. `cwd` is the folder a card's session starts in; left
 empty you pick it in the New session form as usual. `done` names the columns
-that mean the work is over, drawn in the quiet colour.
+that mean the work is over, drawn in the quiet colour. `inProgress` names the
+column a card moves to when a session is started from it (any case; `""`
+leaves cards where they are).
 
 `config.json`, `auth.json`, `state.json` and the downloaded `cards/` are all
 ignored by git: nothing about your account or your board is ever committed.
@@ -67,7 +69,8 @@ In it you can
   ignored cards" at the end of the board lists them, and "Show on the board
   again" in their menu brings one back. Kept in `state.json`;
 - **start a session from a card** — the button in the card, its right-click
-  menu, or a double-click on it;
+  menu, or a double-click on it. The card moves to the `inProgress` column
+  (In Progress) as the session starts;
 - **filter** — by title, description, label, member or card id. The columns
   stay put while the cards thin out, so the board still reads as your board.
 

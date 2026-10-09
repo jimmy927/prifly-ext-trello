@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { cardLists, linkCard, type State, unlinkCard } from "./world";
+import { cardLists, linkCard, listNamed, type State, unlinkCard } from "./world";
 
 const state = (links: Record<string, string[]>): State => ({
   board: "",
@@ -33,5 +33,21 @@ describe("linkCard and unlinkCard", () => {
     expect(at.links).toEqual({ s1: ["b"] });
     unlinkCard(at, "s1", "b");
     expect(at.links).toEqual({});
+  });
+});
+
+describe("listNamed", () => {
+  const lists = [
+    { id: "1", name: "Backlog" },
+    { id: "2", name: "In Progress" },
+  ];
+
+  test("finds the column whatever its case", () => {
+    expect(listNamed(lists, "in progress")?.id).toBe("2");
+  });
+
+  test("an empty name or a missing column is none", () => {
+    expect(listNamed(lists, "")).toBeUndefined();
+    expect(listNamed(lists, "Doing")).toBeUndefined();
   });
 });

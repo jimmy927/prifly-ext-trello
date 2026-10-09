@@ -2,5 +2,6 @@
   "appKey": "",
   "cwd": "",
   "done": ["Done"],
+  "inProgress": "In Progress",
   "refreshSeconds": 60
 }

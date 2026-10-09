@@ -26,6 +26,11 @@ export type Config = {
   cwd: string;
   /** The lists that mean the work is over, drawn in the quiet colour. */
   done: string[];
+  /**
+   * The list a card moves to when a session is started from it, matched by
+   * name without regard to case; "" leaves the card where it is.
+   */
+  inProgress: string;
   refreshSeconds: number;
 };
 
@@ -92,6 +97,13 @@ export async function reload(world: World): Promise<void> {
   }
 }
 
+/** The list called `name` on the board, whatever its case; none for "". */
+export function listNamed(lists: readonly TrelloList[], name: string): TrelloList | undefined {
+  const wanted = name.trim().toLowerCase();
+  if (wanted === "") return undefined;
+  return lists.find((list) => list.name.trim().toLowerCase() === wanted);
+}
+
 export async function readConfig(folder: string): Promise<Config> {
   const raw = (await Bun.file(join(folder, "config.json"))
     .json()
@@ -100,6 +112,7 @@ export async function readConfig(folder: string): Promise<Config> {
     appKey: raw.appKey ?? Bun.env["TRELLO_APP_KEY"] ?? "",
     cwd: raw.cwd ?? "",
     done: raw.done ?? ["Done"],
+    inProgress: raw.inProgress ?? "In Progress",
     refreshSeconds: Math.max(15, raw.refreshSeconds ?? 60),
   };
 }

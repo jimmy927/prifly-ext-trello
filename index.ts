@@ -51,6 +51,7 @@ import {
   type Config,
   creds,
   linkCard,
+  listNamed,
   load,
   ready,
   reload,
@@ -426,12 +427,36 @@ function typeOf(path: string): string | null {
   return INLINE.has(mediaType) ? mediaType : null;
 }
 
-/** The session that card became: remembered, so the chip finds its row again. */
+/**
+ * The session that card became: remembered, so the chip finds its row again,
+ * and the card moved to the in-progress column, since starting a session on it
+ * is starting the work.
+ */
 export async function launched(_launchId: string, key: string, sessionId: string): Promise<void> {
   const at = here();
   linkCard(at.state, sessionId, key);
   await writeState(at.api.folder, at.state);
+  await startWork(at, key);
   show();
+}
+
+/**
+ * The card into the in-progress column, unless it is there already. A board
+ * without that column, or Trello refusing, leaves the card where it was: the
+ * session has started either way, and the chip can still move it.
+ */
+async function startWork(at: World, key: string): Promise<void> {
+  const auth = creds(at);
+  const target = listNamed(at.lists, at.config.inProgress);
+  const card = at.cards.find((entry) => entry.shortLink === key);
+  if (auth === null || target === undefined || card?.idList === target.id) return;
+  try {
+    await moveCard(key, target.id, auth);
+    at.api.log("moved", { card: key, list: target.id, why: "launched" });
+    await reload(at);
+  } catch (caught) {
+    at.api.log("move_failed", { card: key, list: target.id, message: message(caught) });
+  }
 }
 
 /**
