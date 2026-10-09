@@ -5,6 +5,22 @@
   "version": "0.1.0",
   "main": "index.ts",
   "prompt": "prompt.md",
+  "settings": [
+    {
+      "id": "summaryOnArchive",
+      "label": "Post a summary on the card when a session is archived",
+      "description": "Ticked at first in the archive dialog: the session gets one more turn to write what it did, for the people on the board, and posts it on the card with pictures of the change. Untick it there to skip it once.",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "id": "archiveColumn",
+      "label": "Move the card on archive to",
+      "description": "The column the archive dialog picks first for a session's card, e.g. Done or Review (any case). Empty leaves the card where it is.",
+      "type": "string",
+      "default": ""
+    }
+  ],
   "launch": [
     {
       "id": "card",

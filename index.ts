@@ -35,6 +35,13 @@ import type {
 import { knownSessions, linkedSessions, sessionById } from "./session-lookup";
 import { isSetupKey, runSetup, setupChoices, setupTail } from "./setup";
 import {
+  archiveSettings,
+  hasArchiveFollowUps,
+  SUMMARY_PREFIX,
+  summaryPrompt,
+  summaryTool,
+} from "./summary";
+import {
   archiveCard,
   type Creds,
   dataUrl,
@@ -64,6 +71,11 @@ let world: World | null = null;
 
 export async function activate(api: ExtensionApi): Promise<() => void> {
   world = await load(api);
+  api.tools?.register([summaryTool(() => (world === null ? null : creds(world)))]);
+  // The chips carry what the archive dialog picks first: drawn again when that changes.
+  api.onSettings?.(() => {
+    if (world !== null && ready(world)) show();
+  });
   let stopped = false;
   const tick = async () => {
     try {
@@ -103,17 +115,47 @@ function show(): void {
       // A card that left the board — archived, or moved to another one — stops
       // being drawn; the link stays, in case it comes back.
       if (card === undefined) return [];
-      const face = chip(card, at);
-      return [{ ...face, actions: [...(face.actions ?? []), unlinkAction(sessionId)] }];
+      return [chip(card, at, sessionId)];
     });
     if (chips.length > 0) bySession[sessionId] = chips;
   }
   at.api.show(bySession, []);
 }
 
-function chip(card: TrelloCard, at: World): Decoration {
+/**
+ * A card on its session's banner. Its menu moves it, ignores it, asks the
+ * session for a summary on it and unlinks it; on archive prifly offers the
+ * moves as the card's choices — the reader's `archiveColumn` picked first —
+ * and the summary as a box, ticked when `summaryOnArchive` is on.
+ */
+function chip(card: TrelloCard, at: World, sessionId: string): Decoration {
   const list = at.lists.find((entry) => entry.id === card.idList);
   const name = list?.name ?? "";
+  const followUps = hasArchiveFollowUps(at.api);
+  const settings = archiveSettings(at.api);
+  const target = listNamed(at.lists, settings.archiveColumn);
+  const moves: DecorationAction[] = at.lists
+    .filter((entry) => entry.id !== card.idList)
+    .map((entry) => ({
+      id: `move:${entry.id}`,
+      label: `Move to ${entry.name}`,
+      ...(followUps ? { archive: { kind: "choice" as const, first: entry.id === target?.id } } : {}),
+    }));
+  // Only where prifly can hand the session a turn: without it, nothing would write it.
+  const summary: DecorationAction[] =
+    at.api.prompt === undefined
+      ? []
+      : [
+          {
+            id: `${SUMMARY_PREFIX}${sessionId}`,
+            label: "Post a summary of this session on the card",
+            confirm:
+              "The session gets one more turn: it writes what was done, for the people on the board, and posts it on the card with pictures of the change.",
+            ...(followUps
+              ? { archive: { kind: "turn" as const, first: settings.summaryOnArchive } }
+              : {}),
+          },
+        ];
   return {
     key: card.shortLink,
     icon: "trello",
@@ -129,15 +171,16 @@ function chip(card: TrelloCard, at: World): Decoration {
       `${card.badges.comments} comments · ${card.badges.attachments} attachments`,
     ].filter((line) => line !== ""),
     url: card.url,
+    ...(followUps ? { place: name } : {}),
     // Every other list on the board: moving a card is a click, not a turn.
     // Then the same ignoring the board's card menu offers.
     actions: [
-      ...at.lists
-        .filter((entry) => entry.id !== card.idList)
-        .map((entry) => ({ id: `move:${entry.id}`, label: `Move to ${entry.name}` })),
+      ...moves,
+      ...summary,
       at.state.ignored.includes(card.shortLink)
         ? { id: "unignore", label: "Show on the board again" }
         : { id: "ignore", label: "Never start a session from this" },
+      unlinkAction(sessionId),
     ],
   };
 }
@@ -503,6 +546,8 @@ async function carryOut(
   }
   if (actionId.startsWith(UNLINK_PREFIX))
     return await unlink(at, key, actionId.slice(UNLINK_PREFIX.length), name);
+  if (actionId.startsWith(SUMMARY_PREFIX))
+    return await askSummary(at, key, actionId.slice(SUMMARY_PREFIX.length));
   if (actionId === "archive") {
     await archiveCard(key, auth);
     at.api.log("archived", { card: key });
@@ -534,6 +579,22 @@ async function link(at: World, key: string, sessionId: string): Promise<string> 
   at.api.log("linked", { card: key, session: sessionId.slice(0, 8) });
   const title = sessionById(at.api, sessionId)?.title;
   return `Linked to ${title ?? sessionId.slice(0, 8)}`;
+}
+
+/**
+ * The session asked to put a summary of its work on the card: one more turn,
+ * which writes it and posts it with `trello_post_summary`. On archive prifly
+ * waits for that turn before archiving.
+ */
+async function askSummary(at: World, key: string, sessionId: string): Promise<string> {
+  if (at.api.prompt === undefined) throw new Error("This prifly cannot give a session a turn yet: update it.");
+  const card = at.cards.find((entry) => entry.shortLink === key);
+  if (card === undefined) throw new Error("That card is no longer on the board.");
+  const { delivered } = await at.api.prompt(sessionId, summaryPrompt(card));
+  at.api.log("summary_asked", { card: key, session: sessionId.slice(0, 8), delivered });
+  if (!delivered) throw new Error("The session could not be reached to write the summary.");
+  const title = sessionById(at.api, sessionId)?.title;
+  return `${title ?? sessionId.slice(0, 8)} is writing a summary for “${short(card.name, 50)}”.`;
 }
 
 /** A link made by mistake, undone from the chip: the card itself is left alone in Trello. */

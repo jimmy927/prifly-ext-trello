@@ -166,6 +166,34 @@ export async function moveCard(id: string, idList: string, creds: Creds): Promis
   if (!response.ok) throw new Error(`Trello could not move the card: ${response.status}`);
 }
 
+/** A comment on a card, in Trello's Markdown, as the reader. */
+export async function comment(id: string, text: string, creds: Creds): Promise<void> {
+  const response = await fetch(url(`/cards/${id}/actions/comments`, creds), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!response.ok) throw new Error(`Trello could not comment on the card: ${response.status}`);
+}
+
+/** A file from disk attached to a card; its address on Trello, for a comment to show it by. */
+export async function attach(
+  id: string,
+  path: string,
+  name: string,
+  creds: Creds,
+): Promise<string> {
+  const form = new FormData();
+  form.append("name", name);
+  form.append("file", Bun.file(path), name);
+  const response = await fetch(url(`/cards/${id}/attachments`, creds), {
+    method: "POST",
+    body: form,
+  });
+  if (!response.ok) throw new Error(`Trello could not attach ${name}: ${response.status}`);
+  return ((await response.json()) as { url: string }).url;
+}
+
 /**
  * An attachment, saved beside the others.
  *

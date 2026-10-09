@@ -55,6 +55,16 @@ export type DecorationAction = {
    * Cancelling the picker calls nothing.
    */
   pick?: "session" | undefined;
+  /**
+   * Offered in the archive dialog for this item, once its session is done.
+   * `choice` is one of the item's radio options (a column to move a card to);
+   * `turn` is a box under them whose action gives the session one more turn
+   * (`prompt`), and the session is archived once that turn has ended. `first`
+   * picks the choice, or ticks the box, before the reader does anything.
+   * Where `api.features` includes "archive-follow-ups": an older prifly
+   * refuses the field.
+   */
+  archive?: { kind: "choice" | "turn"; first?: boolean } | undefined;
 };
 
 /** What the reader picked for an action with `pick` set; see `DecorationAction.pick`. */
@@ -83,6 +93,12 @@ export type Decoration = {
    * `confirm`, when it is not "".
    */
   actions?: DecorationAction[] | undefined;
+  /**
+   * Where the item stands now — the column a card is in — named in the
+   * archive dialog ("Leave in In Progress"). Where `api.features` includes
+   * "archive-follow-ups".
+   */
+  place?: string | undefined;
 };
 
 /** A column of a board, in the order the board has them. */
@@ -213,7 +229,46 @@ export type Launch = {
 /** A session the host knows, for an extension to match its things against. */
 export type ExtensionSession = { id: string; title: string; cwd: string; state: string };
 
+/** A setting's value: a box, a number, a line of text, or the options ticked. */
+export type SettingValue = boolean | number | string | string[];
+
+/** Every declared setting's value, by field id, defaults filled in. */
+export type SettingValues = Readonly<Record<string, SettingValue>>;
+
+/** What an extension tool's call is given besides its arguments. */
+export type ExtensionToolContext = {
+  /** The full id of the session that called the tool. */
+  session: string;
+  /** Aborted when the session or the call goes away. */
+  signal: AbortSignal;
+};
+
+/** An MCP tool served to every session as `mcp__prifly__<name>`. */
+export type ExtensionTool = {
+  /** `^[a-z][a-z0-9_]{0,47}$`. */
+  name: string;
+  description: string;
+  /** A JSON Schema object for the arguments. */
+  inputSchema: Record<string, unknown>;
+  /** The text the tool returns; a throw is returned as a tool error. */
+  call(args: Record<string, unknown>, ctx: ExtensionToolContext): Promise<string>;
+};
+
 export type ExtensionApi = {
+  /**
+   * The values of the manifest's `settings`, defaults filled in, current at
+   * each read. Where `api.features` includes "settings".
+   */
+  settings?: SettingValues;
+  /** Called after the reader changes a setting, with every value. Where `api.features` includes "settings". */
+  onSettings?: (handler: (values: SettingValues) => void) => void;
+  /** MCP tools this extension serves to every session. Absent on an older prifly. */
+  tools?: { register(tools: ExtensionTool[]): void };
+  /**
+   * Sends `text` into the session as a <prifly-notice> (prifly's, not the
+   * reader's); resumes it first if it ended. Absent on an older prifly.
+   */
+  prompt?(sessionId: string, text: string): Promise<{ delivered: boolean }>;
   /**
    * Replace everything this extension shows. `bySession` is keyed by a
    * session id or any unique start of one (a label has room for 8 characters);

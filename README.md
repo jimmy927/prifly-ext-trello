@@ -82,6 +82,17 @@ In it you can
 - **A chip on the session** — which column the card is in, who is on it, when
   it is due, how much has been said on it. It links to the card, and its menu
   moves the card to any other column on the board.
+- **A summary on the card** — when a session is archived, prifly's archive
+  dialog names the column the card is in, offers the other columns to move it
+  to, and a box "Post a summary of this session on the card". Ticked, the
+  session gets one more turn: it writes what was done for the people on the
+  board and posts it as a comment with pictures of the change (its mockups,
+  its screenshots) through the `trello_post_summary` tool, and prifly archives
+  it once that turn is over. The chip's menu has the same summary for any
+  time. Two settings in the Extensions dialog: whether the box starts ticked
+  (`summaryOnArchive`, on), and the column picked first (`archiveColumn`,
+  e.g. Done; empty leaves the card where it is). Needs a prifly with
+  "archive-follow-ups"; an older one still offers the moves and the menu item.
 - **A Claude Code skill** — `skills/trello`: search cards, read one whole,
   download its attachments. It uses the same login, so sessions never ask you
   for a key. The repository is also a Claude Code plugin and its own
