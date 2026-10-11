@@ -55,6 +55,10 @@ to another machine. The Trello skill gets the token from the vault through
 `vault_run` (entry `trello`). The downloaded `cards/` are ignored by git: nothing
 about your account or your board is ever committed.
 
+Updating from a version that kept its login or board choice in files in this
+folder: those files are no longer read. Log in once more and pick your board
+again; the old files can be deleted.
+
 ## The board
 
 *From a Trello card…* opens your board nearly the size of the window, laid out

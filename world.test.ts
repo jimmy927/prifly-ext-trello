@@ -145,18 +145,18 @@ describe("a prifly missing settings, state or the vault", () => {
       // A login in the vault and a board in the state must not wake anything up.
       fake.entries.set("trello", "t".repeat(40));
       let shown = 0;
-      let tools = 0;
+      let wired = 0;
       Object.assign(fake.api, {
         show: () => {
           shown += 1;
         },
         tools: {
           register: () => {
-            tools += 1;
+            wired += 1;
           },
         },
         onSettings: () => {
-          tools += 1;
+          wired += 1;
         },
       });
       const stop = await activate(fake.api);
@@ -172,7 +172,7 @@ describe("a prifly missing settings, state or the vault", () => {
       stop();
       expect(asked).toEqual([]);
       expect(shown).toBe(0);
-      expect(tools).toBe(0);
+      expect(wired).toBe(0);
       expect(readdirSync(folder)).toEqual([]);
       expect(fake.database.writes()).toBe(0);
       expect(fake.filed).toEqual([]);

@@ -1,2 +1,8 @@
+# Files older versions wrote here, possibly holding a token. Never read any more;
+# ignored so an existing clone does not commit them.
+config.json
+auth.json
+app.json
+state.json
 cards/
 skills/*-local/
