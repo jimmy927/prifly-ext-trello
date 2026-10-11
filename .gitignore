@@ -1,7 +1,2 @@
-# Never read any more; ignored so an old copy holding an app key is not committed.
-config.json
-auth.json
-app.json
-state.json
 cards/
 skills/*-local/

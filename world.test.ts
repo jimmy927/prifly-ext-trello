@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { authorizeUrl, PRIFLY_APP_KEY, writeAppKey } from "./auth";
-import { fakeState } from "./fake-state";
+import { authorizeUrl, PRIFLY_APP_KEY } from "./auth";
+import { fakePrifly, type Needed } from "./fake-prifly";
+import { activate, choices } from "./index";
 import type { ExtensionApi } from "./prifly-api";
 import { runSetup, setupChoices } from "./setup";
 import {
@@ -11,14 +12,12 @@ import {
   changeState,
   columnList,
   configFromSettings,
-  hasSettings,
-  hasState,
   linkCard,
   listNamed,
   load,
   type State,
+  supported,
   unlinkCard,
-  type World,
 } from "./world";
 
 const state = (links: Record<string, string[]>): State => ({
@@ -27,17 +26,12 @@ const state = (links: Record<string, string[]>): State => ({
   links,
   ignored: [],
   member: "",
-  vaultDeclined: false,
 });
 
 describe("cardLists", () => {
   test("keeps only string short links, once each", () => {
     expect(cardLists({ s1: ["a", 7, "b", "a"], s2: 7, s3: [] })).toEqual({ s1: ["a", "b"] });
     expect(cardLists(null)).toEqual({});
-  });
-
-  test("reads a one-card link from an older state.json as a list of one", () => {
-    expect(cardLists({ s1: "abc" })).toEqual({ s1: ["abc"] });
   });
 });
 
@@ -74,28 +68,16 @@ describe("listNamed", () => {
   });
 });
 
-/** A prifly api; with `settings` it offers them, as a prifly that has the feature does. */
-function fakeApi(settings?: Record<string, string | number>): ExtensionApi {
-  return {
-    folder: "/nonexistent/trello-extension",
-    features: settings === undefined ? [] : ["settings"],
-    log: () => {},
-    ...(settings === undefined ? {} : { settings }),
-  } as unknown as ExtensionApi;
-}
-
 describe("configFromSettings", () => {
   test("reads every key from the settings", () => {
     expect(
       configFromSettings({
-        appKey: " " + "b".repeat(32) + " ",
         cwd: "C:\\Users\\jimmy\\src\\odi",
         done: "Done, Shipped ,",
         inProgress: "Doing now",
         refreshSeconds: 30,
       }),
     ).toEqual({
-      appKey: "b".repeat(32),
       // A Windows path is kept as typed.
       cwd: "C:\\Users\\jimmy\\src\\odi",
       done: ["Done", "Shipped"],
@@ -104,27 +86,13 @@ describe("configFromSettings", () => {
     });
   });
 
-  test("nothing set gives the declared defaults, and no app key from the environment", () => {
-    const before = Bun.env["TRELLO_APP_KEY"];
-    Bun.env["TRELLO_APP_KEY"] = "e".repeat(32);
-    try {
-      expect(configFromSettings({})).toEqual({
-        appKey: PRIFLY_APP_KEY,
-        cwd: "",
-        done: ["Done"],
-        inProgress: "In Progress",
-        refreshSeconds: 60,
-      });
-    } finally {
-      if (before === undefined) delete Bun.env["TRELLO_APP_KEY"];
-      else Bun.env["TRELLO_APP_KEY"] = before;
-    }
-  });
-
-  test("an empty or blank app key setting falls back to prifly's own", () => {
-    expect(PRIFLY_APP_KEY).toMatch(/^[0-9a-f]{32}$/);
-    expect(configFromSettings({ appKey: "" }).appKey).toBe(PRIFLY_APP_KEY);
-    expect(configFromSettings({ appKey: "  " }).appKey).toBe(PRIFLY_APP_KEY);
+  test("nothing set gives the declared defaults", () => {
+    expect(configFromSettings({})).toEqual({
+      cwd: "",
+      done: ["Done"],
+      inProgress: "In Progress",
+      refreshSeconds: 60,
+    });
   });
 
   test("a refresh rate under 15 seconds is raised to 15", () => {
@@ -136,76 +104,100 @@ describe("configFromSettings", () => {
   });
 });
 
-describe("a prifly without extension settings", () => {
-  const worldOf = async (api: ExtensionApi): Promise<World> => await load(api);
+describe("the app key", () => {
+  test("is prifly's own, 32 hex characters, and the login page uses it", () => {
+    expect(PRIFLY_APP_KEY).toMatch(/^[0-9a-f]{32}$/);
+    expect(authorizeUrl(PRIFLY_APP_KEY)).toContain(`key=${PRIFLY_APP_KEY}`);
+  });
+});
 
-  test("hasSettings needs both the feature and the values", () => {
-    expect(hasSettings(fakeApi())).toBe(false);
-    expect(hasSettings({ features: [], settings: {} } as unknown as ExtensionApi)).toBe(false);
-    expect(hasSettings({ features: ["settings"] } as unknown as ExtensionApi)).toBe(false);
-    expect(hasSettings(fakeApi({}))).toBe(true);
+describe("a prifly missing settings, state or the vault", () => {
+  let folder = "";
+  const realFetch = globalThis.fetch;
+  let asked: string[] = [];
+  beforeEach(() => {
+    folder = mkdtempSync(join(tmpdir(), "trello-world-"));
+    asked = [];
+    globalThis.fetch = (async (input: unknown) => {
+      asked.push(String(input));
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    rmSync(folder, { recursive: true, force: true });
   });
 
-  test("the chooser is a single row saying to update prifly, even with an app key and login", async () => {
-    const world = await worldOf(fakeApi());
-    world.config.appKey = "a".repeat(32);
+  test("supported needs all three, as feature and as api", () => {
+    expect(supported(fakePrifly(folder).api)).toBe(true);
+    for (const missing of ["settings", "state", "vault-file"] as Needed[])
+      expect(supported(fakePrifly(folder, { without: [missing] }).api)).toBe(false);
+    // The feature name alone, without the api behind it, is not enough.
+    const noApi = fakePrifly(folder).api as { state?: unknown };
+    delete noApi.state;
+    expect(supported(noApi as ExtensionApi)).toBe(false);
+    expect(supported({ features: [] } as unknown as ExtensionApi)).toBe(false);
+  });
+
+  for (const missing of ["settings", "state", "vault-file"] as Needed[]) {
+    test(`without ${missing}: only the Update row shows, nothing runs and no file is written`, async () => {
+      const fake = fakePrifly(folder, { without: [missing] });
+      // A login in the vault and a board in the state must not wake anything up.
+      fake.entries.set("trello", "t".repeat(40));
+      let shown = 0;
+      let tools = 0;
+      Object.assign(fake.api, {
+        show: () => {
+          shown += 1;
+        },
+        tools: {
+          register: () => {
+            tools += 1;
+          },
+        },
+        onSettings: () => {
+          tools += 1;
+        },
+      });
+      const stop = await activate(fake.api);
+      const rows = await choices("card", "");
+      expect(Array.isArray(rows)).toBe(true);
+      const list = rows as { key: string; title: string; input?: unknown }[];
+      expect(list.map((row) => row.title)).toEqual(["Update prifly to use this extension"]);
+      expect(list[0]?.input).toBeUndefined();
+      const world = await load(fake.api);
+      expect(world.session).toBeNull();
+      const launch = await runSetup(world, list[0]?.key ?? "", "");
+      expect(launch?.message).toContain("Update prifly");
+      stop();
+      expect(asked).toEqual([]);
+      expect(shown).toBe(0);
+      expect(tools).toBe(0);
+      expect(readdirSync(folder)).toEqual([]);
+      expect(fake.database.writes()).toBe(0);
+      expect(fake.filed).toEqual([]);
+    });
+  }
+
+  test("the chooser is the Update row even when everything else is in place", async () => {
+    const fake = fakePrifly(folder, { without: ["state"] });
+    const world = await load(fake.api);
     world.session = { token: "t", member: "m" };
     world.state.board = "board";
     const rows = await setupChoices(world);
     expect(rows).toHaveLength(1);
     expect(rows?.[0]?.title).toBe("Update prifly to use this extension");
-    expect(rows?.[0]?.input).toBeUndefined();
-    const launch = await runSetup(world, rows?.[0]?.key ?? "", "");
-    expect(launch?.message).toContain("Update prifly");
   });
-});
 
-describe("setup without an app key setting", () => {
-  let keyFolder = "";
-  beforeEach(() => {
-    keyFolder = mkdtempSync(join(tmpdir(), "trello-key-"));
-  });
-  afterEach(() => rmSync(keyFolder, { recursive: true, force: true }));
-
-  test("the chooser starts at the login rows and the login page uses prifly's key", async () => {
-    const world = await load(fakeApi({}));
+  test("a supported prifly starts at the login rows", async () => {
+    const world = await load(fakePrifly(folder).api);
     const rows = await setupChoices(world);
     expect(rows?.map((row) => row.title)).toEqual([
       "1. Open the Trello login page",
       "2. Paste the token Trello shows you",
     ]);
-    expect(world.config.appKey).toBe(PRIFLY_APP_KEY);
-    expect(authorizeUrl(world.config.appKey)).toContain(`key=${PRIFLY_APP_KEY}`);
-  });
-
-  test("a key of the reader's own wins", async () => {
-    const own = "d".repeat(32);
-    const world = await load(fakeApi({ appKey: own }));
-    expect(world.config.appKey).toBe(own);
-    expect(authorizeUrl(world.config.appKey)).toContain(`key=${own}`);
-  });
-
-  test("app.json for the skill gets the effective key", async () => {
-    await writeAppKey(keyFolder, configFromSettings({}).appKey);
-    expect(await Bun.file(join(keyFolder, "app.json")).json()).toEqual({ key: PRIFLY_APP_KEY });
-    await writeAppKey(keyFolder, configFromSettings({ appKey: "d".repeat(32) }).appKey);
-    expect(await Bun.file(join(keyFolder, "app.json")).json()).toEqual({ key: "d".repeat(32) });
   });
 });
-
-/** A prifly api with `api.state` in memory (when `withState`), an extension folder and a log. */
-function stateApi(folder: string, withState = true) {
-  const database = fakeState();
-  const logs: string[] = [];
-  const api = {
-    folder,
-    features: withState ? ["settings", "state"] : ["settings"],
-    settings: {},
-    log: (event: string) => logs.push(event),
-    ...(withState ? { state: database } : {}),
-  } as unknown as ExtensionApi;
-  return { api, database, logs };
-}
 
 describe("state in prifly's database", () => {
   let folder = "";
@@ -216,103 +208,40 @@ describe("state in prifly's database", () => {
     rmSync(folder, { recursive: true, force: true });
   });
 
-  const legacy = {
-    board: "b1",
-    boardName: "Work",
-    links: { s1: "abc", s2: ["d", "e"] },
-    ignored: ["x"],
-    member: "jimmy",
-    vaultDeclined: true,
-  };
-
-  test("an existing state.json is imported once, with a one-card link read as a list", async () => {
-    writeFileSync(join(folder, "state.json"), JSON.stringify(legacy));
-    const { api, database } = stateApi(folder);
-    const world = await load(api);
-    expect(world.state).toEqual({ ...legacy, links: { s1: ["abc"], s2: ["d", "e"] } });
-    expect(JSON.parse(database.docs.get("state") ?? "null")).toEqual(world.state);
-  });
-
-  test("an imported state.json is never read or written again", async () => {
-    writeFileSync(join(folder, "state.json"), JSON.stringify(legacy));
-    const { api, database } = stateApi(folder);
-    await load(api);
-    // Changed after the import: the database is the truth, the file is ignored.
-    const other = JSON.stringify({ board: "other" });
-    writeFileSync(join(folder, "state.json"), other);
-    const again = await load(api);
-    expect(again.state.board).toBe("b1");
-    await changeState(again, (state) => {
-      state.board = "b2";
-    });
-    expect(readFileSync(join(folder, "state.json"), "utf8")).toBe(other);
-    expect((await load(api)).state.board).toBe("b2");
-    // The import, then the one change.
-    expect(database.writes()).toBe(2);
-  });
-
-  test("no state.json starts empty and stores nothing, so a later start asks again", async () => {
-    const { api, database } = stateApi(folder);
-    const world = await load(api);
+  test("a new install starts empty and stores nothing", async () => {
+    const fake = fakePrifly(folder);
+    const world = await load(fake.api);
     expect(world.state).toEqual(state({}));
-    expect(database.docs.has("state")).toBe(false);
-    writeFileSync(join(folder, "state.json"), JSON.stringify({ board: "late" }));
-    expect((await load(api)).state.board).toBe("late");
-  });
-
-  test("a state.json that is not JSON imports nothing", async () => {
-    writeFileSync(join(folder, "state.json"), "{ not json");
-    const { api, database } = stateApi(folder);
-    expect((await load(api)).state).toEqual(state({}));
-    expect(database.docs.has("state")).toBe(false);
+    expect(fake.database.docs.has("state")).toBe(false);
   });
 
   test("changes persist through a restart", async () => {
-    const { api } = stateApi(folder);
-    const world = await load(api);
+    const fake = fakePrifly(folder);
+    const world = await load(fake.api);
     await changeState(world, (at) => {
       at.board = "b1";
       at.boardName = "Work";
       linkCard(at, "s1", "abc");
     });
     expect(world.state.links).toEqual({ s1: ["abc"] });
-    const restarted = await load(api);
+    const restarted = await load(fakePrifly(folder, { database: fake.database }).api);
     expect(restarted.state).toEqual({ ...state({ s1: ["abc"] }), board: "b1", boardName: "Work" });
   });
 
   test("two changes at once both land", async () => {
-    const { api } = stateApi(folder);
-    const world = await load(api);
+    const fake = fakePrifly(folder);
+    const world = await load(fake.api);
     await Promise.all([
       changeState(world, (at) => linkCard(at, "s1", "a")),
       changeState(world, (at) => linkCard(at, "s1", "b")),
       changeState(world, (at) => linkCard(at, "s2", "c")),
     ]);
-    expect((await load(api)).state.links).toEqual({ s1: ["a", "b"], s2: ["c"] });
+    expect((await load(fake.api)).state.links).toEqual({ s1: ["a", "b"], s2: ["c"] });
   });
 
-  test("without the state feature: logged once, kept in memory, no files written", async () => {
-    writeFileSync(join(folder, "state.json"), JSON.stringify(legacy));
-    const { api, logs } = stateApi(folder, false);
-    const world = await load(api);
-    expect(logs.filter((event) => event === "needs_newer_prifly")).toHaveLength(1);
-    // The old file is not even imported.
-    expect(world.state).toEqual(state({}));
-    await changeState(world, (at) => {
-      at.board = "b9";
-      linkCard(at, "s1", "abc");
-    });
-    expect(world.state.board).toBe("b9");
-    expect(world.state.links).toEqual({ s1: ["abc"] });
-    expect(readdirSync(folder)).toEqual(["state.json"]);
-    expect(readFileSync(join(folder, "state.json"), "utf8")).toBe(JSON.stringify(legacy));
-    expect(logs.filter((event) => event === "needs_newer_prifly")).toHaveLength(1);
-  });
-
-  test("hasState needs both the feature and the api", () => {
-    expect(hasState(stateApi(folder).api)).toBe(true);
-    expect(hasState(stateApi(folder, false).api)).toBe(false);
-    expect(hasState({ features: ["state"] } as unknown as ExtensionApi)).toBe(false);
-    expect(hasState({ features: [], state: fakeState() } as unknown as ExtensionApi)).toBe(false);
+  test("a stored document with parts missing is read with those parts empty", async () => {
+    const fake = fakePrifly(folder);
+    await fake.database.set("state", { board: "b1" });
+    expect((await load(fake.api)).state).toEqual({ ...state({}), board: "b1" });
   });
 });

@@ -8,13 +8,6 @@
   "vault": ["trello"],
   "settings": [
     {
-      "id": "appKey",
-      "label": "Your own Trello app key (optional)",
-      "description": "Leave empty to use prifly's own app key. Fill it in only to use your own Trello app (trello.com/apps/admin); a token approved for another key needs one new login after you change it.",
-      "type": "string",
-      "default": ""
-    },
-    {
       "id": "cwd",
       "label": "Folder a card's session works in",
       "description": "Typed as your system writes it, e.g. /home/you/src/app or C:\\Users\\you\\src\\app. Empty leaves the folder to you in the New session form.",

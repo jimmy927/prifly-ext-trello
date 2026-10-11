@@ -2,12 +2,10 @@
 """
 Trello CLI: search/read cards and download attachments.
 
-Credentials come from the prifly Trello extension this skill ships with. The
-app key (no secret) is in its app.json. The token is in prifly's vault as the
-entry "trello": run this script through the vault_run tool with entry "trello",
-which hands it over as TRELLO_TOKEN. A prifly without the vault keeps the token
-in the extension's auth.json instead, and this script reads it there.
-TRELLO_API_KEY and TRELLO_TOKEN override both, for a machine that has no prifly on it.
+The app key is prifly's own (KEY below, no secret). The token comes only from
+the TRELLO_TOKEN environment variable. Inside prifly run this script through the
+vault_run tool with entry "trello": the vault entry the extension's login filed
+is handed over as TRELLO_TOKEN. Outside prifly set TRELLO_TOKEN yourself.
 """
 
 from __future__ import annotations
@@ -24,59 +22,21 @@ from pathlib import Path
 from typing import Any
 
 API = "https://api.trello.com/1"
-def extension_roots() -> list[Path]:
-    """
-    Where the login might be.
-
-    This file's own folder first — a clone, or the extension as prifly runs
-    it. Then prifly's extensions folder, because Claude Code installs a plugin
-    by copying it into its cache, and the copy has no auth.json: the login
-    belongs to the extension the reader actually enabled, not to every copy of
-    the script. The same goes for `app.json`.
-    """
-    here = Path(__file__).resolve().parent.parent.parent
-    named = os.environ.get("PRIFLY_TRELLO_HOME")
-    installed = Path.home() / ".local/share/prifly/extensions/prifly-ext-trello"
-    roots = [here, installed] if named is None else [Path(named), here, installed]
-    seen: list[Path] = []
-    for root in roots:
-        if root not in seen:
-            seen.append(root)
-    return seen
+# prifly's own Trello app key: public by design, it only names the app. Equal to
+# PRIFLY_APP_KEY in auth.ts (a test keeps the two the same).
+KEY = "d7eef1652518d7226a0ad96b985a97f7"
 
 
 def load_creds() -> tuple[str, str]:
-    """The app key and the reader's own token, in that order of preference."""
-    key = os.environ.get("TRELLO_API_KEY")
-    tok = os.environ.get("TRELLO_TOKEN")
-    if key and tok:
-        return key, tok
-
-    def read(name: str, field: str) -> str | None:
-        for root in extension_roots():
-            try:
-                found = json.loads((root / name).read_text()).get(field)
-            except (OSError, ValueError):
-                continue
-            if found:
-                return str(found)
-        return None
-
-    # auth.json's key is from before app.json.
-    key = key or read("app.json", "key") or read("auth.json", "key")
-    tok = tok or read("auth.json", "token")
-    if key and tok:
-        return key, tok
-    if key:
+    """The app key and the reader's token, which only TRELLO_TOKEN supplies."""
+    token = os.environ.get("TRELLO_TOKEN")
+    if not token:
         sys.exit(
-            "no Trello token: the login is in prifly's vault. Run this script with the "
-            "vault_run tool, entry \"trello\" (it sets TRELLO_TOKEN), or log in from prifly: "
-            "'From a Trello card…' (or set TRELLO_TOKEN)"
+            "TRELLO_TOKEN is not set. Inside prifly, run this script through the "
+            'vault_run tool with entry "trello" (log in first from "From a Trello '
+            'card..."). Outside prifly, set TRELLO_TOKEN to your Trello token.'
         )
-    sys.exit(
-        "not logged in to Trello: open prifly, click 'From a Trello card…' and log in "
-        "(or set TRELLO_API_KEY and TRELLO_TOKEN)"
-    )
+    return KEY, token
 
 
 def http_get(

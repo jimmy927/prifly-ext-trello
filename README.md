@@ -10,6 +10,10 @@ another column when the work moves.
 
 ## Install
 
+Needs a prifly with extension **settings**, **state** and the **vault**. When
+one of the three is missing the list shows a single row, "Update prifly to use
+this extension", and nothing else runs: no refresh, no Trello calls.
+
 In prifly: status bar → the puzzle icon → Install from
 `https://github.com/jimmy927/prifly-ext-trello`, then tick it to enable it. Or
 clone this repository into `~/.local/share/prifly/extensions/`.
@@ -23,53 +27,33 @@ card…** and follow the two rows it shows:
 2. **Paste the token Trello shows you** — one paste, once. It is checked
    against Trello there and then, and filed in prifly's vault as the entry
    `trello`: a card asks you to confirm, and the token moves with prifly's data.
-   A prifly without that keeps it in `auth.json` in this folder, readable only
-   by you. A login from before the vault is offered to the vault once on the
-   next start; decline and it stays in `auth.json`, and is not asked about
-   again until you log in again.
 
-Then pick which of your boards to show. That is the whole setup — there is no
-config file to write, and the board can be changed later from the same list
-("Switch board…"), as can logging out.
+Then pick which of your boards to show. That is the whole setup. The board can
+be changed later from the same list ("Switch board…"), as can logging out.
 
-### The app key
-
-Trello wants a **token** (you) and an **app key** (the app asking) on every call.
-prifly ships its own app key, which is public by design — it reads nothing on its
-own — so setup is just logging in and picking a board. To use your own Trello app
-instead, put its key in the setting below ([trello.com/apps/admin](https://trello.com/apps/admin));
-a token approved for another key needs one new login after you change it.
+Trello wants a **token** (you) and an **app key** (the app asking) on every
+call. The app key is prifly's own and is public by design: it reads nothing on
+its own.
 
 The plain configuration is a set of settings in prifly's **Extensions** dialog
 (Trello board):
 
 | Setting | What it is |
 | --- | --- |
-| Your own Trello app key (optional) | Empty uses prifly's key. A key you set wins. |
 | Folder a card's session works in (`cwd`) | Typed as your system writes it, e.g. `/home/you/src/app` or `C:\Users\you\src\app`; taken as typed. Empty: you pick it in the New session form as usual. |
 | Columns that mean the work is over (`done`) | Comma-separated, e.g. `Done, Released`; drawn in the quiet colour. |
 | Move the card to this column when a session starts (`inProgress`) | Any case; empty leaves cards where they are. |
 | Refresh the board every (`refreshSeconds`) | At least 15. A change takes effect at once. |
 
 These are stored in prifly's database, so they move with prifly's data (for
-instance to a native Windows host) instead of sitting in a file here. On
-Windows, set the folder once: a Linux path means nothing there.
-
-A prifly too old to have extension settings shows one row, "Update prifly to use
-this extension", and the extension does nothing else.
-
-The key in use (prifly's or yours) is copied to `app.json` for the Trello skill, which gets the token from
-the vault through `vault_run` (entry `trello`).
-
-`auth.json`, `app.json`, an old `state.json` and the downloaded `cards/` are ignored by git:
-nothing about your account or your board is ever committed.
+instance to a native Windows host). On Windows, set the folder once: a Linux
+path means nothing there.
 
 The board you chose, each session's cards and the other things the extension
 remembers live in prifly's database (`api.state`), so `prifly-move` carries them
-to another machine. A `state.json` left by an earlier version is imported once
-and never read or written again. A prifly too old to have `api.state` logs
-`needs_newer_prifly` once and keeps these in memory until the extension stops;
-it writes no files.
+to another machine. The Trello skill gets the token from the vault through
+`vault_run` (entry `trello`). The downloaded `cards/` are ignored by git: nothing
+about your account or your board is ever committed.
 
 ## The board
 
@@ -114,9 +98,10 @@ In it you can
   e.g. Done; empty leaves the card where it is). Needs a prifly with
   "archive-follow-ups"; an older one still offers the moves and the menu item.
 - **A Claude Code skill** — `skills/trello`: search cards, read one whole,
-  download its attachments. It uses the same login, so sessions never ask you
-  for a key. The repository is also a Claude Code plugin and its own
-  marketplace, so terminal sessions can have it too:
+  download its attachments. In prifly it uses the same login: sessions run it
+  through `vault_run` with the entry `trello`, which sets `TRELLO_TOKEN`. The
+  repository is also a Claude Code plugin and its own marketplace, so terminal
+  sessions can have it too; there, set `TRELLO_TOKEN` to your Trello token:
 
       claude plugin marketplace add jimmy927/prifly-ext-trello
       claude plugin install trello@prifly-ext-trello

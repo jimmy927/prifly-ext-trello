@@ -1,76 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { forgetSession, writeAppKey } from "./auth";
-import { type FakeState, fakeState } from "./fake-state";
-import type { ExtensionApi, VaultFileRequest, VaultFileResult } from "./prifly-api";
+import { forgetSession, PRIFLY_APP_KEY } from "./auth";
+import { type FakeOptions, type FakePrifly, fakePrifly } from "./fake-prifly";
 import { runSetup } from "./setup";
-import { load, moveLogin, parseState, type State } from "./world";
-
-/** prifly's database for the extension, one per test folder: it outlives a fake api, as a restart does. */
-const databases = new Map<string, FakeState>();
-const stateFor = (at: string): FakeState => {
-  const found = databases.get(at) ?? fakeState();
-  databases.set(at, found);
-  return found;
-};
-/** What the extension has kept as its state. */
-const readState = async (at: string): Promise<State> => parseState(await stateFor(at).get("state"));
+import { load, parseState } from "./world";
 
 const TOKEN = "t".repeat(40);
 const OTHER = "o".repeat(40);
-const KEY = "k".repeat(32);
-
-/** A prifly's vault for one extension, in memory: what `file` is answered with is `answer`. */
-type Fake = {
-  api: ExtensionApi;
-  entries: Map<string, string>;
-  filed: { name: string; request: VaultFileRequest }[];
-  forgotten: string[];
-  logs: string[];
-};
-
-function fakeVault(
-  folder: string,
-  options: { features?: string[]; answer?: VaultFileResult["outcome"]; ownEntry?: boolean } = {},
-): Fake {
-  const entries = new Map<string, string>();
-  const filed: Fake["filed"] = [];
-  const forgotten: string[] = [];
-  const logs: string[] = [];
-  const features = options.features ?? ["settings", "vault-file", "state"];
-  const answer = options.answer ?? "accepted";
-  const vault = features.includes("vault-file")
-    ? {
-        read: async (name: string) => entries.get(name) ?? null,
-        file: async (name: string, request: VaultFileRequest): Promise<VaultFileResult> => {
-          filed.push({ name, request });
-          if (answer === "accepted") {
-            entries.set(name, request.token);
-            return { outcome: "accepted", level: 1 };
-          }
-          return answer === "refused" ? { outcome: "refused", message: "not listed" } : { outcome: answer };
-        },
-        forget: async (name: string) => {
-          forgotten.push(name);
-          // An entry the reader made themselves is not the extension's to remove.
-          if (options.ownEntry === false) return false;
-          return entries.delete(name);
-        },
-      }
-    : undefined;
-  const api = {
-    folder,
-    features,
-    settings: { appKey: KEY },
-    log: (event: string, fields?: Record<string, unknown>) =>
-      logs.push(`${event} ${JSON.stringify(fields ?? {})}`),
-    ...(vault === undefined ? {} : { vault }),
-    ...(features.includes("state") ? { state: stateFor(folder) } : {}),
-  } as unknown as ExtensionApi;
-  return { api, entries, filed, forgotten, logs };
-}
 
 let folder = "";
 const realFetch = globalThis.fetch;
@@ -79,27 +17,28 @@ beforeEach(() => {
   folder = mkdtempSync(join(tmpdir(), "trello-login-"));
   // Trello answering `whoami`.
   globalThis.fetch = (async () =>
-    new Response(JSON.stringify({ username: "jimmy" }), { status: 200 })) as unknown as typeof fetch;
+    new Response(JSON.stringify({ username: "jimmy" }), {
+      status: 200,
+    })) as unknown as typeof fetch;
 });
 
 afterEach(() => {
   globalThis.fetch = realFetch;
   rmSync(folder, { recursive: true, force: true });
-  databases.clear();
 });
 
-const authPath = () => join(folder, "auth.json");
-const writeAuth = (extra: Record<string, unknown> = {}) =>
-  writeFileSync(authPath(), JSON.stringify({ token: TOKEN, member: "old", key: KEY, ...extra }));
-const login = async (fake: Fake, token = TOKEN) => {
+/** What the extension has kept as its state. */
+const readState = async (fake: FakePrifly) => parseState(await fake.database.get("state"));
+const prifly = (options: FakeOptions = {}) => fakePrifly(folder, options);
+const login = async (fake: FakePrifly, token = TOKEN) => {
   const world = await load(fake.api);
   const launch = await runSetup(world, "setup:paste-token", token);
   return { world, launch };
 };
 
 describe("logging in", () => {
-  test("with the vault, the token is filed there and no auth.json is written", async () => {
-    const fake = fakeVault(folder);
+  test("the token is filed in the vault and no file is written", async () => {
+    const fake = prifly();
     const { world, launch } = await login(fake);
     expect(launch?.message).toContain("Logged in as jimmy");
     expect(fake.filed).toHaveLength(1);
@@ -107,239 +46,166 @@ describe("logging in", () => {
     expect(fake.filed[0]?.request.token === TOKEN).toBe(true);
     expect(fake.filed[0]?.request.host).toBe("trello.com");
     expect(fake.entries.get("trello") === TOKEN).toBe(true);
-    expect(existsSync(authPath())).toBe(false);
+    expect(readdirSync(folder)).toEqual([]);
     expect(world.session?.member).toBe("jimmy");
     // The name is not a secret and the vault holds only the token: it is kept in prifly's state.
-    expect((await readState(folder)).member).toBe("jimmy");
+    expect((await readState(fake)).member).toBe("jimmy");
   });
 
-  test("on a prifly without vault-file, the token goes to auth.json as before", async () => {
-    const fake = fakeVault(folder, { features: ["settings"] });
-    await login(fake);
-    expect(fake.filed).toHaveLength(0);
-    const kept = await Bun.file(authPath()).json();
-    expect(kept).toEqual({ token: TOKEN, member: "jimmy" });
+  test("Trello is asked with prifly's app key", async () => {
+    const asked: string[] = [];
+    globalThis.fetch = (async (input: unknown) => {
+      asked.push(String(input));
+      return new Response(JSON.stringify({ username: "jimmy" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await login(prifly());
+    expect(asked[0]).toContain(`key=${PRIFLY_APP_KEY}`);
   });
 
-  test("a reader who declines the card is not logged in, and nothing is written", async () => {
-    const fake = fakeVault(folder, { answer: "declined" });
+  test("a reader who declines the card is not logged in, and nothing is kept", async () => {
+    const fake = prifly({ answer: "declined" });
     const world = await load(fake.api);
     await expect(runSetup(world, "setup:paste-token", TOKEN)).rejects.toThrow("declined");
     expect(world.session).toBeNull();
-    expect(existsSync(authPath())).toBe(false);
+    expect(readdirSync(folder)).toEqual([]);
     expect(fake.entries.size).toBe(0);
   });
 
   test("a refusal says why, without the token", async () => {
-    const fake = fakeVault(folder, { answer: "refused" });
+    const fake = prifly({ answer: "refused" });
     const world = await load(fake.api);
-    const failure = await runSetup(world, "setup:paste-token", TOKEN).catch((caught: Error) => caught);
+    const failure = await runSetup(world, "setup:paste-token", TOKEN).catch(
+      (caught: Error) => caught,
+    );
     expect((failure as Error).message).toContain("not listed");
     expect((failure as Error).message.includes(TOKEN)).toBe(false);
-  });
-
-  test("a fresh login drops the old auth.json token", async () => {
-    writeAuth({ extra: 1 });
-    const fake = fakeVault(folder);
-    await login(fake, OTHER);
-    expect(await Bun.file(authPath()).json()).toEqual({ extra: 1 });
   });
 });
 
 describe("reading the login", () => {
   test("from the vault, with the name kept in prifly's state", async () => {
-    const fake = fakeVault(folder);
+    const fake = prifly();
     fake.entries.set("trello", TOKEN);
-    await stateFor(folder).set("state", { member: "jimmy" });
+    await fake.database.set("state", { member: "jimmy" });
     const world = await load(fake.api);
     expect(world.session?.token === TOKEN).toBe(true);
     expect(world.session?.member).toBe("jimmy");
   });
 
-  test("the vault wins over a leftover auth.json", async () => {
-    const fake = fakeVault(folder);
-    fake.entries.set("trello", OTHER);
-    writeAuth();
-    expect((await load(fake.api)).session?.token === OTHER).toBe(true);
+  test("a login survives a restart: token in the vault, board in the state", async () => {
+    const fake = prifly();
+    const { world } = await login(fake);
+    await runSetup(world, "setup:board:b1|Work", "");
+    // A restart: a new api over the same database, and the vault still holds the entry.
+    const again = prifly({ database: fake.database });
+    again.entries.set("trello", fake.entries.get("trello") ?? "");
+    const back = await load(again.api);
+    expect(back.session?.token === TOKEN).toBe(true);
+    expect(back.state.board).toBe("b1");
+    expect(back.state.boardName).toBe("Work");
   });
 
-  test("falls back to auth.json when the vault reads nothing, and on an older prifly", async () => {
-    writeAuth();
-    const world = await load(fakeVault(folder).api);
-    expect(world.session?.token === TOKEN).toBe(true);
-    expect(world.session?.member).toBe("old");
-    const older = await load(fakeVault(folder, { features: ["settings"] }).api);
-    expect(older.session?.token === TOKEN).toBe(true);
-  });
-
-  test("nothing anywhere is logged out", async () => {
-    expect((await load(fakeVault(folder).api)).session).toBeNull();
-  });
-});
-
-describe("moving auth.json into the vault", () => {
-  test("accepted: filed, then the token leaves auth.json and the file goes", async () => {
-    writeAuth();
-    const fake = fakeVault(folder);
-    const world = await load(fake.api);
-    await moveLogin(world);
-    expect(fake.filed).toHaveLength(1);
-    expect(fake.filed[0]?.request.token === TOKEN).toBe(true);
-    expect(fake.entries.get("trello") === TOKEN).toBe(true);
-    expect(existsSync(authPath())).toBe(false);
-    expect(world.state.member).toBe("old");
-    expect((await readState(folder)).member).toBe("old");
-    // And the next start reads it from the vault.
-    expect((await load(fake.api)).session?.token === TOKEN).toBe(true);
-  });
-
-  test("accepted: anything else in auth.json stays", async () => {
-    writeAuth({ extra: 1 });
-    const fake = fakeVault(folder);
-    await moveLogin(await load(fake.api));
-    expect(await Bun.file(authPath()).json()).toEqual({ extra: 1 });
-  });
-
-  test("declined: auth.json stays, still logged in, and the next start does not ask", async () => {
-    writeAuth();
-    const fake = fakeVault(folder, { answer: "declined" });
-    const world = await load(fake.api);
-    await moveLogin(world);
-    expect(fake.filed).toHaveLength(1);
-    expect(existsSync(authPath())).toBe(true);
-    expect(world.session?.token === TOKEN).toBe(true);
-    expect((await readState(folder)).vaultDeclined).toBe(true);
-    const next = await load(fake.api);
-    await moveLogin(next);
-    expect(fake.filed).toHaveLength(1);
-    expect(next.session?.token === TOKEN).toBe(true);
-  });
-
-  test("a fresh login clears the decline, so the next old login is asked about again", async () => {
-    writeAuth();
-    const declined = fakeVault(folder, { answer: "declined" });
-    await moveLogin(await load(declined.api));
-    expect((await readState(folder)).vaultDeclined).toBe(true);
-    const fake = fakeVault(folder);
-    await login(fake, OTHER);
-    expect((await readState(folder)).vaultDeclined).toBe(false);
-    writeAuth();
-    const again = fakeVault(folder);
-    await moveLogin(await load(again.api));
-    expect(again.filed).toHaveLength(1);
-  });
-
-  test("a timeout is not remembered as a decline", async () => {
-    writeAuth();
-    const fake = fakeVault(folder, { answer: "timed out" });
-    await moveLogin(await load(fake.api));
-    expect((await readState(folder)).vaultDeclined).toBe(false);
-    expect(existsSync(authPath())).toBe(true);
-  });
-
-  test("nothing to ask: no auth.json login, an entry already there, or no vault-file", async () => {
-    const empty = fakeVault(folder);
-    await moveLogin(await load(empty.api));
-    expect(empty.filed).toHaveLength(0);
-    writeAuth();
-    const there = fakeVault(folder);
-    there.entries.set("trello", OTHER);
-    await moveLogin(await load(there.api));
-    expect(there.filed).toHaveLength(0);
-    const older = fakeVault(folder, { features: ["settings"] });
-    await moveLogin(await load(older.api));
-    expect(older.filed).toHaveLength(0);
-    expect(existsSync(authPath())).toBe(true);
+  test("nothing in the vault is logged out", async () => {
+    expect((await load(prifly().api)).session).toBeNull();
   });
 });
 
 describe("logging out", () => {
-  test("forgets the vault entry and the file, and clears the name", async () => {
-    const fake = fakeVault(folder);
+  test("forgets the vault entry and clears the name", async () => {
+    const fake = prifly();
     const { world } = await login(fake);
-    writeAuth();
     const launch = await runSetup(world, "setup:log-out", "");
     expect(fake.forgotten).toEqual(["trello"]);
     expect(fake.entries.has("trello")).toBe(false);
-    expect(existsSync(authPath())).toBe(false);
     expect(world.session).toBeNull();
-    expect((await readState(folder)).member).toBe("");
+    expect((await readState(fake)).member).toBe("");
     expect(launch?.message).toContain("Logged out");
     expect((await load(fake.api)).session).toBeNull();
   });
 
   test("an entry the reader made themselves stays, and the reader is told", async () => {
-    const fake = fakeVault(folder, { ownEntry: false });
+    const fake = prifly({ ownEntry: false });
     fake.entries.set("trello", TOKEN);
     const world = await load(fake.api);
     const launch = await runSetup(world, "setup:log-out", "");
     expect(launch?.message).toContain("Vault dialog");
     expect(await forgetSession(fake.api)).toBe(true);
   });
-
-  test("on an older prifly it only removes auth.json", async () => {
-    writeAuth();
-    const fake = fakeVault(folder, { features: ["settings"] });
-    const world = await load(fake.api);
-    await runSetup(world, "setup:log-out", "");
-    expect(existsSync(authPath())).toBe(false);
-    expect(fake.forgotten).toHaveLength(0);
-  });
 });
 
 describe("the token is never logged", () => {
-  test("not through a login, a move, a failed move or a logout", async () => {
-    writeAuth();
-    const fake = fakeVault(folder, { answer: "refused" });
+  test("not through a login, a refused login or a logout", async () => {
+    const fake = prifly({ answer: "refused" });
     const world = await load(fake.api);
-    await moveLogin(world);
     await runSetup(world, "setup:paste-token", OTHER).catch(() => undefined);
     await runSetup(world, "setup:log-out", "");
-    const ok = fakeVault(folder);
-    writeAuth();
-    await moveLogin(await load(ok.api));
+    const ok = prifly();
+    await login(ok, TOKEN);
     const all = [...fake.logs, ...ok.logs].join("\n");
     expect(all.includes(TOKEN) || all.includes(OTHER)).toBe(false);
   });
 });
 
-describe("the skill finds the app key", () => {
+describe("the skill", () => {
   const trello = join(import.meta.dir, "skills/trello");
-  const credsIn = async (home: string, env: Record<string, string>) => {
+  const source = () => Bun.file(join(trello, "trello.py")).text();
+
+  const credsIn = async (env: Record<string, string>) => {
     const code =
       "import sys, trello\n" +
       "try:\n" +
       "    key, tok = trello.load_creds()\n" +
-      "    print('key=' + key + ' token=' + str(tok == 'from-vault'))\n" +
+      "    print('key=' + key + ' token=' + tok)\n" +
       "except SystemExit as e:\n" +
       "    print('exit: ' + str(e))\n";
     const run = Bun.spawn(["python3", "-c", code], {
       cwd: trello,
-      env: { PATH: Bun.env["PATH"] ?? "", PYTHONDONTWRITEBYTECODE: "1", HOME: home, PRIFLY_TRELLO_HOME: folder, ...env },
+      // A HOME and a PRIFLY_TRELLO_HOME holding a login file do not matter: only TRELLO_TOKEN counts.
+      env: {
+        PATH: Bun.env["PATH"] ?? "",
+        PYTHONDONTWRITEBYTECODE: "1",
+        HOME: folder,
+        PRIFLY_TRELLO_HOME: folder,
+        ...env,
+      },
       stdout: "pipe",
       stderr: "pipe",
     });
     return (await new Response(run.stdout).text()).trim();
   };
 
-  test("app.json is written once and read, with the token from vault_run's TRELLO_TOKEN", async () => {
-    await writeAppKey(folder, KEY);
-    expect(await Bun.file(join(folder, "app.json")).json()).toEqual({ key: KEY });
-    expect(await credsIn(folder, { TRELLO_TOKEN: "from-vault" })).toBe(`key=${KEY} token=True`);
+  test("its KEY is the extension's PRIFLY_APP_KEY", async () => {
+    const found = /^KEY = "([0-9a-f]+)"$/m.exec(await source());
+    expect(found?.[1]).toBe(PRIFLY_APP_KEY);
   });
 
-  test("an empty key writes no app.json", async () => {
-    await writeAppKey(folder, "");
-    expect(existsSync(join(folder, "app.json"))).toBe(false);
+  test("the token is TRELLO_TOKEN, as vault_run sets it, and the key is its own", async () => {
+    expect(await credsIn({ TRELLO_TOKEN: "from-vault" })).toBe(
+      `key=${PRIFLY_APP_KEY} token=from-vault`,
+    );
   });
 
-  test("a key without a token says to use vault_run", async () => {
-    await writeAppKey(folder, KEY);
-    expect(await credsIn(folder, {})).toContain("vault_run");
+  test("TRELLO_API_KEY changes nothing", async () => {
+    expect(await credsIn({ TRELLO_TOKEN: "x", TRELLO_API_KEY: "other" })).toBe(
+      `key=${PRIFLY_APP_KEY} token=x`,
+    );
   });
 
-  test("an auth.json login on an older prifly is still found, with its own key", async () => {
-    writeAuth();
-    expect(await credsIn(folder, {})).toBe(`key=${KEY} token=False`);
+  test("no TRELLO_TOKEN says to use vault_run, or to set it", async () => {
+    const said = await credsIn({});
+    expect(said).toContain("TRELLO_TOKEN is not set");
+    expect(said).toContain("vault_run");
+  });
+
+  test("no login file is looked for", async () => {
+    const text = await source();
+    for (const gone of [
+      "auth.json",
+      "app.json",
+      "extension_roots",
+      "PRIFLY_TRELLO_HOME",
+      "TRELLO_API_KEY",
+    ])
+      expect(text.includes(gone)).toBe(false);
   });
 });

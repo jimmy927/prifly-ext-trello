@@ -9,11 +9,18 @@
  * again, one step further on.
  */
 
-import { authorizeUrl, forgetSession, keepSession, looksLikeToken, whoami } from "./auth";
+import {
+  authorizeUrl,
+  forgetSession,
+  keepSession,
+  looksLikeToken,
+  PRIFLY_APP_KEY,
+  whoami,
+} from "./auth";
 import { openBrowser } from "./open-browser";
 import type { Launch, LaunchChoice } from "./prifly-api";
 import { myBoards } from "./trello";
-import { changeState, creds, hasSettings, ready, type World } from "./world";
+import { changeState, creds, ready, supported, type World } from "./world";
 
 /** The keys this file answers to; a card's key is its short link. */
 const KEYS = {
@@ -34,7 +41,7 @@ export function isSetupKey(key: string): boolean {
  * once there is nothing left to settle.
  */
 export async function setupChoices(world: World): Promise<LaunchChoice[] | null> {
-  if (!hasSettings(world.api)) return [updateRow()];
+  if (!supported(world.api)) return [updateRow()];
   if (world.session === null) return loginRows();
   if (world.state.board === "") return await boardRows(world);
   return null;
@@ -60,14 +67,14 @@ export function setupTail(world: World): LaunchChoice[] {
   ];
 }
 
-/** A prifly without extension settings: nothing can be configured, so nothing runs. */
+/** This extension needs a prifly with settings, state and a vault: until then nothing runs. */
 function updateRow(): LaunchChoice {
   return {
     key: KEYS.update,
     title: "Update prifly to use this extension",
     group: "Setup",
     detail:
-      "This extension is configured in prifly's Extensions dialog, which this version of prifly does not offer. Update prifly, then open this list again.",
+      "This extension needs a prifly with extension settings, state and the vault. Update prifly, then open this list again.",
     tone: "warning",
   };
 }
@@ -85,9 +92,12 @@ function loginRows(): LaunchChoice[] {
       key: KEYS.token,
       title: "2. Paste the token Trello shows you",
       group: "Log in",
-      detail: "Trello ends the approval with a token to copy. It is kept in prifly's vault, or on this machine only.",
+      detail: "Trello ends the approval with a token to copy. It is kept in prifly's vault.",
       tone: "info",
-      input: { title: "The token from Trello", placeholder: "the long word Trello shows after you approve" },
+      input: {
+        title: "The token from Trello",
+        placeholder: "the long word Trello shows after you approve",
+      },
     },
   ];
 }
@@ -110,7 +120,8 @@ async function boardRows(world: World): Promise<LaunchChoice[]> {
 
 /** Carry out one of those rows. Null when the key is not one of them. */
 export async function runSetup(world: World, key: string, input: string): Promise<Launch | null> {
-  if (key === KEYS.update) return notice("Update prifly to use this extension, then open this list again.");
+  if (key === KEYS.update)
+    return notice("Update prifly to use this extension, then open this list again.");
   if (key === KEYS.open) return await openLogin(world);
   if (key === KEYS.token) return await saveToken(world, input);
   if (key.startsWith(KEYS.board)) return await chooseBoard(world, key.slice(KEYS.board.length));
@@ -125,7 +136,7 @@ function notice(message: string): Launch {
 }
 
 async function openLogin(world: World): Promise<Launch> {
-  const url = authorizeUrl(world.config.appKey);
+  const url = authorizeUrl(PRIFLY_APP_KEY);
   const opened = await openBrowser(url);
   world.api.log("login_page", { opened });
   return {
@@ -140,18 +151,18 @@ async function saveToken(world: World, input: string): Promise<Launch> {
   const token = input.trim();
   if (!looksLikeToken(token))
     throw new Error("That is not a token — paste the one long word Trello showed you.");
-  const auth = { key: world.config.appKey, token };
+  const auth = { key: PRIFLY_APP_KEY, token };
   // Asked of Trello before it is kept: a token that does not work should fail
   // here, where the reader is looking, not quietly an hour later.
   const member = await whoami(auth);
   const session = { token, member };
   const refusal = await keepSession(world.api, session);
-  if (refusal !== null) throw new Error(`${refusal} Nothing was kept: pick “2. Paste the token” again to retry.`);
+  if (refusal !== null)
+    throw new Error(`${refusal} Nothing was kept: pick “2. Paste the token” again to retry.`);
   world.session = session;
-  // The vault holds only the token. A fresh login is asked about again, whatever was declined before.
+  // The vault holds only the token; the name is kept in prifly's state.
   await changeState(world, (state) => {
     state.member = member;
-    state.vaultDeclined = false;
   });
   world.api.log("logged_in", { member });
   return { prompt: "", message: `Logged in as ${member}. Now choose a board.` };
@@ -182,7 +193,6 @@ async function logOut(world: World): Promise<Launch> {
     state.board = "";
     state.boardName = "";
     state.member = "";
-    state.vaultDeclined = false;
   });
   world.cards = [];
   world.lists = [];

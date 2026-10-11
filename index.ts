@@ -16,7 +16,6 @@
  */
 
 import { join } from "node:path";
-import { writeAppKey } from "./auth";
 import { cardFace, cardItem, shortDate } from "./card-face";
 import { cardPrompt } from "./card-prompt";
 import { LINK_ACTION, withLink } from "./link-actions";
@@ -60,13 +59,12 @@ import {
   changeState,
   configFromSettings,
   creds,
-  hasSettings,
   linkCard,
   listNamed,
   load,
-  moveLogin,
   ready,
   reload,
+  supported,
   unlinkCard,
   type World,
 } from "./world";
@@ -75,15 +73,13 @@ let world: World | null = null;
 
 export async function activate(api: ExtensionApi): Promise<() => void> {
   world = await load(api);
-  // A prifly without extension settings: the chooser says to update it
+  // Settings, state or the vault missing: the chooser says to update prifly
   // (`setupChoices`), and nothing else runs — no timer, no Trello calls.
-  if (!hasSettings(api)) {
+  if (!supported(api)) {
     return () => {
       world = null;
     };
   }
-  await writeAppKey(api.folder, world.config.appKey);
-  void moveLogin(world);
   api.tools?.register([summaryTool(() => (world === null ? null : creds(world)))]);
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -100,7 +96,6 @@ export async function activate(api: ExtensionApi): Promise<() => void> {
     const before = world.config.refreshSeconds;
     world.config = configFromSettings(values);
     if (world.config.refreshSeconds !== before) arm();
-    void writeAppKey(api.folder, world.config.appKey);
     // The chips carry what the archive dialog picks first, and the done tone: drawn again.
     if (ready(world)) show();
   });
