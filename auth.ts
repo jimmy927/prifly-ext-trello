@@ -65,11 +65,29 @@ export async function readSession(folder: string): Promise<Session | null> {
   return raw?.token === undefined ? null : { token: raw.token, member: raw.member ?? "you" };
 }
 
-export async function writeSession(folder: string, session: Session): Promise<void> {
+/**
+ * Keeps the login, with the app key it was issued under: a token only works
+ * with that key, and `skills/trello/trello.py` reads both from this file.
+ */
+export async function writeSession(folder: string, session: Session, key = ""): Promise<void> {
   const path = join(folder, "auth.json");
-  await Bun.write(path, JSON.stringify(session, null, 2));
+  await Bun.write(path, JSON.stringify(key === "" ? session : { ...session, key }, null, 2));
   // Someone else's account, on a machine with other users on it.
   await chmod(path, 0o600);
+}
+
+/**
+ * Makes `auth.json` carry `key` beside the token, for a login made before it
+ * did or after the key changed. Written only when it differs; other fields and
+ * the file's mode are kept (overwriting in place leaves the mode alone).
+ */
+export async function syncSessionKey(folder: string, key: string): Promise<void> {
+  if (key === "") return;
+  const file = Bun.file(join(folder, "auth.json"));
+  const raw = (await file.json().catch(() => null)) as Record<string, unknown> | null;
+  if (raw === null || typeof raw !== "object" || raw["token"] === undefined) return;
+  if (raw["key"] === key) return;
+  await Bun.write(file, JSON.stringify({ ...raw, key }, null, 2));
 }
 
 export async function forgetSession(folder: string): Promise<void> {

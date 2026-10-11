@@ -161,7 +161,7 @@ async function saveToken(world: World, input: string): Promise<Launch> {
   // here, where the reader is looking, not quietly an hour later.
   const member = await whoami(auth);
   world.session = { token, member };
-  await writeSession(world.api.folder, world.session);
+  await writeSession(world.api.folder, world.session, world.config.appKey);
   world.api.log("logged_in", { member });
   return { prompt: "", message: `Logged in as ${member}. Now choose a board.` };
 }

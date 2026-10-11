@@ -3,9 +3,9 @@
 Trello CLI: search/read cards and download attachments.
 
 Credentials come from the prifly Trello extension this skill ships with: the
-app key from its config.json and the token from its auth.json, which the
-reader made by logging in to Trello from prifly. TRELLO_API_KEY and
-TRELLO_TOKEN override both, for a machine that has no prifly on it.
+app key and the token from its auth.json (the key the token was issued under
+sits beside it), which the reader made by logging in to Trello from prifly.
+TRELLO_API_KEY and TRELLO_TOKEN override both, for a machine that has no prifly on it.
 """
 
 from __future__ import annotations
@@ -60,12 +60,13 @@ def load_creds() -> tuple[str, str]:
                 return str(found)
         return None
 
-    key = key or read("config.json", "appKey")
+    key = key or read("auth.json", "key")
     tok = tok or read("auth.json", "token")
     if key and tok:
         return key, tok
     sys.exit(
-        "not logged in to Trello: open prifly, click 'From a Trello card…' and log in "
+        "not logged in to Trello: open prifly, set the Trello app key in Extensions, click "
+        "'From a Trello card…' and log in "
         "(or set TRELLO_API_KEY and TRELLO_TOKEN)"
     )
 
