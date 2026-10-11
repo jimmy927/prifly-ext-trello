@@ -2,8 +2,8 @@
  * Logging in to Trello, the way a desktop app does.
  *
  * Two halves make a Trello call: the app key, which names the app and reads
- * nothing on its own, and a token, which is the person. The key ships with the
- * extension (or sits in `config.json`); the token is made by the reader on
+ * nothing on its own, and a token, which is the person. The key is a setting in
+ * prifly's Extensions dialog; the token is made by the reader on
  * Trello's own page, where they sign in however they normally do — Google,
  * Microsoft, Atlassian — and approve prifly by name. prifly never sees a
  * password, and the token is theirs: it reaches their boards and nobody

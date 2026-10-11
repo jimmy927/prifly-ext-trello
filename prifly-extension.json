@@ -9,7 +9,7 @@
     {
       "id": "appKey",
       "label": "Trello app key",
-      "description": "The key that names this app to Trello; it reads nothing on its own, your login does that. Make one at trello.com/power-ups/admin (new Power-Up, API key tab). Empty falls back to the TRELLO_APP_KEY environment variable.",
+      "description": "The key that names this app to Trello; it reads nothing on its own, your login does that. Make one at trello.com/power-ups/admin (new Power-Up, API key tab).",
       "type": "string",
       "default": ""
     },

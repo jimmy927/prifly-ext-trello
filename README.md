@@ -39,7 +39,7 @@ of the plain configuration, in prifly's **Extensions** dialog (Trello board):
 
 | Setting | What it is |
 | --- | --- |
-| Trello app key | The key. Make one at [trello.com/power-ups/admin](https://trello.com/power-ups/admin) — new Power-Up, then the API key tab. Empty falls back to `TRELLO_APP_KEY`. |
+| Trello app key | The key. Make one at [trello.com/power-ups/admin](https://trello.com/power-ups/admin) — new Power-Up, then the API key tab. |
 | Folder a card's session works in (`cwd`) | Typed as your system writes it, e.g. `/home/you/src/app` or `C:\Users\you\src\app`; taken as typed. Empty: you pick it in the New session form as usual. |
 | Columns that mean the work is over (`done`) | Comma-separated, e.g. `Done, Released`; drawn in the quiet colour. |
 | Move the card to this column when a session starts (`inProgress`) | Any case; empty leaves cards where they are. |
@@ -49,24 +49,13 @@ These are stored in prifly's database, so they move with prifly's data (for
 instance to a native Windows host) instead of sitting in a file here. On
 Windows, set the folder once: a Linux path means nothing there.
 
-**Upgrading from `config.json`.** prifly gives an extension no way to write or
-import its settings, so they are not carried over: enter your old values in the
-Extensions dialog once. With prifly's settings available, `config.json` is no
-longer read (you may delete it). On a prifly without extension settings
-(`api.features` lacks `"settings"`) nothing changes: `config.json` is read as
-before, and the first row the chooser offers still takes a pasted app key and
-writes it there:
+prifly gives an extension no way to write its settings, so the key is typed in
+the Extensions dialog; until it is, the first row the chooser offers points
+you there. A prifly too old to have extension settings shows one row, "Update
+prifly to use this extension", and the extension does nothing else.
 
-```json
-{ "appKey": "…", "cwd": "", "done": ["Done"], "inProgress": "In Progress", "refreshSeconds": 60 }
-```
-
-With settings available that first row instead points you to the Extensions
-dialog, as prifly offers nothing to write the key with.
-
-`auth.json`, `state.json` (and `config.json`, where it is used) and the
-downloaded `cards/` are all
-ignored by git: nothing about your account or your board is ever committed.
+`auth.json`, `state.json` and the downloaded `cards/` are ignored by git:
+nothing about your account or your board is ever committed.
 
 ## The board
 

@@ -1,8 +1,0 @@
-{
-  "_note": "Only read by a prifly without extension settings (api.features lacks \"settings\"). Otherwise these are settings in prifly's Extensions dialog: appKey, cwd, done (comma-separated there), inProgress, refreshSeconds.",
-  "appKey": "",
-  "cwd": "",
-  "done": ["Done"],
-  "inProgress": "In Progress",
-  "refreshSeconds": 60
-}

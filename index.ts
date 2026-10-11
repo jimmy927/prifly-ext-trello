@@ -12,7 +12,7 @@
  * it offers the login; you sign in on Trello's own page however you normally
  * do, approve prifly, and then pick which of your boards to show. See
  * `setup.ts` for that, `auth.ts` for what is kept where, and `world.ts` for
- * the three small files this folder holds.
+ * the small files this folder holds.
  */
 
 import { join } from "node:path";
@@ -73,6 +73,13 @@ let world: World | null = null;
 
 export async function activate(api: ExtensionApi): Promise<() => void> {
   world = await load(api);
+  // A prifly without extension settings: the chooser says to update it
+  // (`setupChoices`), and nothing else runs — no timer, no Trello calls.
+  if (!hasSettings(api)) {
+    return () => {
+      world = null;
+    };
+  }
   api.tools?.register([summaryTool(() => (world === null ? null : creds(world)))]);
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -86,11 +93,9 @@ export async function activate(api: ExtensionApi): Promise<() => void> {
   api.onSettings?.((values) => {
     if (world === null) return;
     // cwd, done and inProgress apply at next use; a new refresh rate re-arms the timer.
-    if (hasSettings(api)) {
-      const before = world.config.refreshSeconds;
-      world.config = configFromSettings(values);
-      if (world.config.refreshSeconds !== before) arm();
-    }
+    const before = world.config.refreshSeconds;
+    world.config = configFromSettings(values);
+    if (world.config.refreshSeconds !== before) arm();
     // The chips carry what the archive dialog picks first, and the done tone: drawn again.
     if (ready(world)) show();
   });

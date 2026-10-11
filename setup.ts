@@ -13,7 +13,7 @@ import { authorizeUrl, forgetSession, looksLikeToken, whoami, writeSession } fro
 import { openBrowser } from "./open-browser";
 import type { Launch, LaunchChoice } from "./prifly-api";
 import { myBoards } from "./trello";
-import { creds, hasSettings, ready, type World, writeConfig, writeState } from "./world";
+import { creds, hasSettings, ready, type World, writeState } from "./world";
 
 /** The keys this file answers to; a card's key is its short link. */
 const KEYS = {
@@ -21,6 +21,7 @@ const KEYS = {
   open: "setup:open-login",
   token: "setup:paste-token",
   board: "setup:board:",
+  update: "setup:update-prifly",
   switchBoard: "setup:switch-board",
   logout: "setup:log-out",
 } as const;
@@ -34,7 +35,8 @@ export function isSetupKey(key: string): boolean {
  * once there is nothing left to settle.
  */
 export async function setupChoices(world: World): Promise<LaunchChoice[] | null> {
-  if (world.config.appKey === "") return [appKeyRow(hasSettings(world.api))];
+  if (!hasSettings(world.api)) return [updateRow()];
+  if (world.config.appKey === "") return [appKeyRow()];
   if (world.session === null) return loginRows();
   if (world.state.board === "") return await boardRows(world);
   return null;
@@ -60,26 +62,27 @@ export function setupTail(world: World): LaunchChoice[] {
   ];
 }
 
-function appKeyRow(inSettings: boolean): LaunchChoice {
-  // prifly offers no way to write a setting, so the key is entered where the rest are.
-  if (inSettings) {
-    return {
-      key: KEYS.appKey,
-      title: "Add a Trello app key in prifly's Extensions dialog",
-      group: "Setup",
-      detail:
-        "Open Extensions, pick Trello board and fill in “Trello app key” (make one at trello.com/power-ups/admin), then open this list again.",
-      tone: "warning",
-    };
-  }
+/** A prifly without extension settings: nothing can be configured, so nothing runs. */
+function updateRow(): LaunchChoice {
   return {
-    key: KEYS.appKey,
-    title: "Add a Trello app key",
+    key: KEYS.update,
+    title: "Update prifly to use this extension",
     group: "Setup",
     detail:
-      "The key that names this app to Trello. Make one at trello.com/power-ups/admin — it reads nothing by itself; your login does that.",
+      "This extension is configured in prifly's Extensions dialog, which this version of prifly does not offer. Update prifly, then open this list again.",
     tone: "warning",
-    input: { title: "Trello app key", placeholder: "32 hex characters" },
+  };
+}
+
+function appKeyRow(): LaunchChoice {
+  // prifly offers no way to write a setting, so the key is entered where the rest are.
+  return {
+    key: KEYS.appKey,
+    title: "Add a Trello app key in prifly's Extensions dialog",
+    group: "Setup",
+    detail:
+      "Open Extensions, pick Trello board and fill in “Trello app key” (make one at trello.com/power-ups/admin), then open this list again.",
+    tone: "warning",
   };
 }
 
@@ -121,7 +124,9 @@ async function boardRows(world: World): Promise<LaunchChoice[]> {
 
 /** Carry out one of those rows. Null when the key is not one of them. */
 export async function runSetup(world: World, key: string, input: string): Promise<Launch | null> {
-  if (key === KEYS.appKey) return await saveAppKey(world, input);
+  if (key === KEYS.update) return notice("Update prifly to use this extension, then open this list again.");
+  if (key === KEYS.appKey)
+    return notice("Fill in “Trello app key” in prifly's Extensions dialog, then open this list again.");
   if (key === KEYS.open) return await openLogin(world);
   if (key === KEYS.token) return await saveToken(world, input);
   if (key.startsWith(KEYS.board)) return await chooseBoard(world, key.slice(KEYS.board.length));
@@ -130,18 +135,9 @@ export async function runSetup(world: World, key: string, input: string): Promis
   return null;
 }
 
-async function saveAppKey(world: World, input: string): Promise<Launch> {
-  if (hasSettings(world.api)) {
-    return {
-      prompt: "",
-      message: "Fill in “Trello app key” in prifly's Extensions dialog, then open this list again.",
-    };
-  }
-  const key = input.trim();
-  if (!/^[0-9a-fA-F]{16,64}$/.test(key)) throw new Error("That does not look like a Trello key.");
-  world.config.appKey = key;
-  await writeConfig(world.api.folder, world.config);
-  return { prompt: "", message: "Key saved. Now log in to Trello." };
+/** A row that starts nothing: it only says what to do next. */
+function notice(message: string): Launch {
+  return { prompt: "", message };
 }
 
 async function openLogin(world: World): Promise<Launch> {

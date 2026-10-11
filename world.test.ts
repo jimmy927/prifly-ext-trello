@@ -1,16 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { ExtensionApi } from "./prifly-api";
 import { runSetup, setupChoices } from "./setup";
 import {
   cardLists,
   columnList,
   configFromSettings,
+  hasSettings,
   linkCard,
   listNamed,
-  loadConfig,
+  load,
   type State,
   unlinkCard,
   type World,
@@ -67,61 +65,44 @@ describe("listNamed", () => {
   });
 });
 
-/** A prifly api over a folder holding `config.json`; with `settings` it offers them. */
-function fakeApi(folder: string, settings?: Record<string, string | number>): ExtensionApi {
+/** A prifly api; with `settings` it offers them, as a prifly that has the feature does. */
+function fakeApi(settings?: Record<string, string | number>): ExtensionApi {
   return {
-    folder,
+    folder: "/nonexistent/trello-extension",
     features: settings === undefined ? [] : ["settings"],
     ...(settings === undefined ? {} : { settings }),
   } as unknown as ExtensionApi;
 }
 
-function withFolder(run: (folder: string) => Promise<void>): Promise<void> {
-  const folder = mkdtempSync(join(tmpdir(), "trello-config-"));
-  return run(folder).finally(() => rmSync(folder, { recursive: true, force: true }));
-}
-
-const fileConfig = {
-  appKey: "a".repeat(32),
-  cwd: "/home/jimmy/src/odi",
-  done: ["Done", "Released"],
-  inProgress: "Doing",
-  refreshSeconds: 120,
-};
-
-describe("loadConfig with prifly's settings", () => {
-  test("reads every key from api.settings and ignores config.json", () =>
-    withFolder(async (folder) => {
-      writeFileSync(join(folder, "config.json"), JSON.stringify(fileConfig));
-      const config = await loadConfig(
-        fakeApi(folder, {
-          appKey: "b".repeat(32),
-          cwd: "C:\\Users\\jimmy\\src\\odi",
-          done: "Done, Shipped ,",
-          inProgress: "Doing now",
-          refreshSeconds: 30,
-        }),
-      );
-      expect(config).toEqual({
-        appKey: "b".repeat(32),
-        // A Windows path is kept as typed.
+describe("configFromSettings", () => {
+  test("reads every key from the settings", () => {
+    expect(
+      configFromSettings({
+        appKey: " " + "b".repeat(32) + " ",
         cwd: "C:\\Users\\jimmy\\src\\odi",
-        done: ["Done", "Shipped"],
+        done: "Done, Shipped ,",
         inProgress: "Doing now",
         refreshSeconds: 30,
-      });
-    }));
+      }),
+    ).toEqual({
+      appKey: "b".repeat(32),
+      // A Windows path is kept as typed.
+      cwd: "C:\\Users\\jimmy\\src\\odi",
+      done: ["Done", "Shipped"],
+      inProgress: "Doing now",
+      refreshSeconds: 30,
+    });
+  });
 
-  test("config.json is not imported: the declared defaults apply until the reader sets them", () =>
-    withFolder(async (folder) => {
-      writeFileSync(join(folder, "config.json"), JSON.stringify(fileConfig));
-      const config = await loadConfig(
-        fakeApi(folder, { appKey: "", cwd: "", done: "Done", inProgress: "In Progress", refreshSeconds: 60 }),
-      );
-      expect(config.cwd).toBe("");
-      expect(config.done).toEqual(["Done"]);
-      expect(config.refreshSeconds).toBe(60);
-    }));
+  test("nothing set gives the declared defaults, and no app key from the environment", () => {
+    expect(configFromSettings({})).toEqual({
+      appKey: "",
+      cwd: "",
+      done: ["Done"],
+      inProgress: "In Progress",
+      refreshSeconds: 60,
+    });
+  });
 
   test("a refresh rate under 15 seconds is raised to 15", () => {
     expect(configFromSettings({ refreshSeconds: 3 }).refreshSeconds).toBe(15);
@@ -132,49 +113,39 @@ describe("loadConfig with prifly's settings", () => {
   });
 });
 
-describe("loadConfig without settings", () => {
-  test("reads config.json as before", () =>
-    withFolder(async (folder) => {
-      writeFileSync(join(folder, "config.json"), JSON.stringify(fileConfig));
-      expect(await loadConfig(fakeApi(folder))).toEqual(fileConfig);
-    }));
+describe("a prifly without extension settings", () => {
+  const worldOf = async (api: ExtensionApi): Promise<World> => await load(api);
 
-  test("settings present but the feature not offered still means config.json", () =>
-    withFolder(async (folder) => {
-      writeFileSync(join(folder, "config.json"), JSON.stringify(fileConfig));
-      const api = { ...fakeApi(folder), settings: { cwd: "/elsewhere" } } as ExtensionApi;
-      expect((await loadConfig(api)).cwd).toBe("/home/jimmy/src/odi");
-    }));
+  test("hasSettings needs both the feature and the values", () => {
+    expect(hasSettings(fakeApi())).toBe(false);
+    expect(hasSettings({ features: [], settings: {} } as unknown as ExtensionApi)).toBe(false);
+    expect(hasSettings({ features: ["settings"] } as unknown as ExtensionApi)).toBe(false);
+    expect(hasSettings(fakeApi({}))).toBe(true);
+  });
 
-  test("no file gives today's defaults", () =>
-    withFolder(async (folder) => {
-      const config = await loadConfig(fakeApi(folder));
-      expect(config.done).toEqual(["Done"]);
-      expect(config.inProgress).toBe("In Progress");
-      expect(config.refreshSeconds).toBe(60);
-    }));
+  test("the chooser is a single row saying to update prifly, even with an app key and login", async () => {
+    const world = await worldOf(fakeApi());
+    world.config.appKey = "a".repeat(32);
+    world.session = { token: "t", member: "m" };
+    world.state.board = "board";
+    const rows = await setupChoices(world);
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]?.title).toBe("Update prifly to use this extension");
+    expect(rows?.[0]?.input).toBeUndefined();
+    const launch = await runSetup(world, rows?.[0]?.key ?? "", "");
+    expect(launch?.message).toContain("Update prifly");
+  });
 });
 
 describe("the app key row", () => {
-  const worldOf = (api: ExtensionApi): World =>
-    ({ api, config: { appKey: "" }, session: null, state: { board: "" } }) as unknown as World;
-
-  test("with settings it points at the Extensions dialog and writes no config.json", () =>
-    withFolder(async (folder) => {
-      const world = worldOf(fakeApi(folder, {}));
-      const rows = await setupChoices(world);
-      expect(rows?.[0]?.input).toBeUndefined();
-      const launch = await runSetup(world, "setup:app-key", "c".repeat(32));
-      expect(launch?.message).toContain("Extensions");
-      expect(await Bun.file(join(folder, "config.json")).exists()).toBe(false);
-    }));
-
-  test("without settings it takes the pasted key and writes config.json", () =>
-    withFolder(async (folder) => {
-      const world = worldOf(fakeApi(folder));
-      const rows = await setupChoices(world);
-      expect(rows?.[0]?.input).toBeDefined();
-      await runSetup(world, "setup:app-key", "c".repeat(32));
-      expect((await Bun.file(join(folder, "config.json")).json()).appKey).toBe("c".repeat(32));
-    }));
+  test("points at the Extensions dialog, takes no input and writes nothing", async () => {
+    const world = await load(fakeApi({}));
+    const rows = await setupChoices(world);
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]?.input).toBeUndefined();
+    expect(rows?.[0]?.title).toContain("Extensions");
+    const launch = await runSetup(world, "setup:app-key", "c".repeat(32));
+    expect(launch?.message).toContain("Extensions");
+    expect(world.config.appKey).toBe("");
+  });
 });

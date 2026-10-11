@@ -1,13 +1,12 @@
 /**
  * What this extension knows while it runs, and what it keeps between runs.
  *
- * Three small files sit next to this one, none of them in git: `config.json`
- * (the app key, and where a card's session works — read only by a prifly with
- * no extension settings; otherwise these are settings, `configFromSettings`),
- * `auth.json` (the reader's
- * own Trello token — `auth.ts`), and `state.json` (which board they chose and
- * which session is on which card). Nothing here is shared, and nothing is
- * anybody's but the reader's.
+ * The plain configuration (app key, where a card's session works, …) is
+ * prifly's extension settings, never a file (`configFromSettings`). Two small
+ * files sit next to this one, neither in git: `auth.json` (the reader's own
+ * Trello token — `auth.ts`) and `state.json` (which board they chose and which
+ * session is on which card). Nothing here is shared, and nothing is anybody's
+ * but the reader's.
  */
 
 import { join } from "node:path";
@@ -74,7 +73,7 @@ export function ready(world: World): boolean {
 export async function load(api: ExtensionApi): Promise<World> {
   return {
     api,
-    config: await loadConfig(api),
+    config: configFromSettings(api.settings ?? {}),
     session: await readSession(api.folder),
     state: await readState(api.folder),
     lists: [],
@@ -106,19 +105,12 @@ export function listNamed(lists: readonly TrelloList[], name: string): TrelloLis
   return lists.find((list) => list.name.trim().toLowerCase() === wanted);
 }
 
-/** Whether this prifly keeps the extension's plain settings itself (`api.settings`). */
+/**
+ * Whether this prifly keeps the extension's plain settings (`api.settings`).
+ * Without them the extension has no configuration and does nothing (`setup.ts`).
+ */
 export function hasSettings(api: ExtensionApi): boolean {
   return api.features?.includes("settings") === true && api.settings !== undefined;
-}
-
-/**
- * The config now: from prifly's extension settings where it has them, else
- * from `config.json` as before. With settings, `config.json` is not read at
- * all: prifly offers extensions no way to write a setting, so nothing can
- * carry its values over, and the reader enters them in the Extensions dialog.
- */
-export async function loadConfig(api: ExtensionApi): Promise<Config> {
-  return hasSettings(api) ? configFromSettings(api.settings ?? {}) : await readConfig(api.folder);
 }
 
 /** The column names of a comma-separated setting, trimmed, none empty. */
@@ -131,8 +123,7 @@ export function columnList(text: string): string[] {
 
 /**
  * The config from the manifest's settings. `cwd` is taken as typed, never
- * normalised: on Windows it is `C:\Users\…`. An empty app key falls back to
- * `TRELLO_APP_KEY`, as in `readConfig`.
+ * normalised: on Windows it is `C:\Users\…`.
  */
 export function configFromSettings(values: SettingValues): Config {
   const text = (id: string, fallback: string): string => {
@@ -141,29 +132,12 @@ export function configFromSettings(values: SettingValues): Config {
   };
   const seconds = values["refreshSeconds"];
   return {
-    appKey: text("appKey", "").trim() || (Bun.env["TRELLO_APP_KEY"] ?? ""),
+    appKey: text("appKey", "").trim(),
     cwd: text("cwd", "").trim(),
     done: columnList(text("done", "Done")),
     inProgress: text("inProgress", "In Progress"),
     refreshSeconds: Math.max(15, typeof seconds === "number" ? seconds : 60),
   };
-}
-
-export async function readConfig(folder: string): Promise<Config> {
-  const raw = (await Bun.file(join(folder, "config.json"))
-    .json()
-    .catch(() => ({}))) as Partial<Config>;
-  return {
-    appKey: raw.appKey ?? Bun.env["TRELLO_APP_KEY"] ?? "",
-    cwd: raw.cwd ?? "",
-    done: raw.done ?? ["Done"],
-    inProgress: raw.inProgress ?? "In Progress",
-    refreshSeconds: Math.max(15, raw.refreshSeconds ?? 60),
-  };
-}
-
-export async function writeConfig(folder: string, config: Config): Promise<void> {
-  await Bun.write(join(folder, "config.json"), JSON.stringify(config, null, 2));
 }
 
 export async function readState(folder: string): Promise<State> {

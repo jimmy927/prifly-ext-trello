@@ -8,6 +8,6 @@ imports only its own files and Node built-ins (`node:path`, `node:fs`). The skil
 lockfile and no pyproject.
 
 What it relies on outside the worktree: `bun` on PATH to run or test the TypeScript, and
-`python3` for the skill's script. A logged-in Trello account (`auth.json`, `config.json` and
+`python3` for the skill's script. A logged-in Trello account (`auth.json` and
 `state.json`) exists only in the installed copy under `~/.local/share/prifly/extensions/`, and is
 never needed to work in a worktree.
