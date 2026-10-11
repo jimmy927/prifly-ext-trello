@@ -4,14 +4,14 @@
  * The plain configuration (app key, where a card's session works, …) is
  * prifly's extension settings, never a file (`configFromSettings`). Two small
  * files sit next to this one, neither in git: `auth.json` (the reader's own
- * Trello token — `auth.ts`) and `state.json` (which board they chose and which
+ * Trello token where the vault is not used — `auth.ts`) and `state.json` (which board they chose and which
  * session is on which card). Nothing here is shared, and nothing is anybody's
  * but the reader's.
  */
 
 import { join } from "node:path";
 import type { Session } from "./auth";
-import { readSession } from "./auth";
+import { moveToVault, readSession } from "./auth";
 import type { ExtensionApi, SettingValues } from "./prifly-api";
 import type { TrelloCard, TrelloList } from "./trello";
 import { board as boardOf, type Creds, cards as cardsOf, lists as listsOf } from "./trello";
@@ -46,6 +46,13 @@ export type State = {
    * software work at all. Left off the board, and listed on their own.
    */
   ignored: string[];
+  /** The Trello username of a login kept in the vault, which holds only the token. */
+  member: string;
+  /**
+   * The reader declined moving `auth.json`'s token into the vault: not asked
+   * again until they log in again.
+   */
+  vaultDeclined: boolean;
 };
 
 export type World = {
@@ -71,15 +78,36 @@ export function ready(world: World): boolean {
 }
 
 export async function load(api: ExtensionApi): Promise<World> {
+  const state = await readState(api.folder);
   return {
     api,
     config: configFromSettings(api.settings ?? {}),
-    session: await readSession(api.folder),
-    state: await readState(api.folder),
+    session: await readSession(api, state.member),
+    state,
     lists: [],
     cards: [],
     showIgnored: false,
   };
+}
+
+/**
+ * A login made before the vault moves into it once the reader confirms on
+ * prifly's card, which may wait for them: so callers never await it at start.
+ * A decline is remembered, so the card does not come back on every start.
+ */
+export async function moveLogin(world: World): Promise<void> {
+  if (world.state.vaultDeclined) return;
+  try {
+    const moved = await moveToVault(world.api);
+    if (moved.outcome === "moved") world.state.member = moved.member;
+    else if (moved.outcome === "declined") world.state.vaultDeclined = true;
+    else return;
+    await writeState(world.api.folder, world.state);
+  } catch (caught) {
+    world.api.log("login_move_failed", {
+      message: caught instanceof Error ? caught.message : String(caught),
+    });
+  }
 }
 
 /** What the board has now. Leaves what was last seen alone when it cannot ask. */
@@ -149,6 +177,8 @@ export async function readState(folder: string): Promise<State> {
     boardName: raw.boardName ?? "",
     links: cardLists(raw.links),
     ignored: raw.ignored ?? [],
+    member: raw.member ?? "",
+    vaultDeclined: raw.vaultDeclined === true,
   };
 }
 

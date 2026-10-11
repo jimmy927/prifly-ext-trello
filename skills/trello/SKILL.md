@@ -7,7 +7,7 @@ description: Search and read Trello cards, list boards, and download card attach
 
 Wraps `trello.py`, which sits next to this SKILL.md — run it as `python3 <this skill's folder>/trello.py`. A small Python CLI (stdlib only) that talks to the Trello REST API.
 
-Credentials come from the prifly Trello extension this skill ships with: the reader logged in to Trello from prifly ("From a Trello card…"), and the token is in the extension's `auth.json`. Nothing to set up here. `TRELLO_API_KEY` / `TRELLO_TOKEN` override it on a machine with no prifly. If the script says it is not logged in, say so — do not go looking for keys elsewhere.
+Credentials come from the prifly Trello extension this skill ships with: the reader logged in to Trello from prifly ("From a Trello card…"), The app key is in the extension's `app.json`. The token is in prifly's vault as the entry `trello`, so run the script through the `vault_run` tool with `entry: "trello"` and `argv: ["python3", "<this skill's folder>/trello.py", ...]`: it sets `TRELLO_TOKEN` for that one command, and the token never comes back. (A prifly without the vault keeps the token in `auth.json` and the script reads it there; then run it directly.) Nothing to set up here. `TRELLO_API_KEY` / `TRELLO_TOKEN` override it on a machine with no prifly. If the script says it is not logged in, say so — do not go looking for keys elsewhere.
 
 In prifly, a session started from a card already has that card's whole contents in its first prompt and its attachments on disk: use this skill for the cards it was *not* started from, and to search.
 

@@ -20,8 +20,12 @@ Then open **From a Trello card…** and follow the two rows it shows:
    page. Sign in however you normally do (Google, Microsoft, Atlassian); prifly
    never sees a password.
 2. **Paste the token Trello shows you** — one paste, once. It is checked
-   against Trello there and then, and kept in `auth.json` in this folder,
-   readable only by you.
+   against Trello there and then, and filed in prifly's vault as the entry
+   `trello`: a card asks you to confirm, and the token moves with prifly's data.
+   A prifly without that keeps it in `auth.json` in this folder, readable only
+   by you. A login from before the vault is offered to the vault once on the
+   next start; decline and it stays in `auth.json`, and is not asked about
+   again until you log in again.
 
 Then pick which of your boards to show. That is the whole setup — there is no
 config file to write, and the board can be changed later from the same list
@@ -54,7 +58,10 @@ the Extensions dialog; until it is, the first row the chooser offers points
 you there. A prifly too old to have extension settings shows one row, "Update
 prifly to use this extension", and the extension does nothing else.
 
-`auth.json`, `state.json` and the downloaded `cards/` are ignored by git:
+The key is copied to `app.json` for the Trello skill, which gets the token from
+the vault through `vault_run` (entry `trello`).
+
+`auth.json`, `app.json`, `state.json` and the downloaded `cards/` are ignored by git:
 nothing about your account or your board is ever committed.
 
 ## The board

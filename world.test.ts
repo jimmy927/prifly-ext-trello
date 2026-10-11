@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionApi } from "./prifly-api";
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { syncSessionKey, writeSession } from "./auth";
 import { runSetup, setupChoices } from "./setup";
 import {
   cardLists,
@@ -23,6 +19,8 @@ const state = (links: Record<string, string[]>): State => ({
   boardName: "",
   links,
   ignored: [],
+  member: "",
+  vaultDeclined: false,
 });
 
 describe("cardLists", () => {
@@ -159,44 +157,4 @@ describe("the app key row", () => {
     expect(launch?.message).toContain("Extensions");
     expect(world.config.appKey).toBe("");
   });
-});
-
-describe("auth.json carries the app key", () => {
-  const inFolder = async (run: (folder: string) => Promise<void>) => {
-    const folder = mkdtempSync(join(tmpdir(), "trello-auth-"));
-    try {
-      await run(folder);
-    } finally {
-      rmSync(folder, { recursive: true, force: true });
-    }
-  };
-  const readAuth = (folder: string) => Bun.file(join(folder, "auth.json")).json();
-
-  test("a saved login holds the key beside token and member", () =>
-    inFolder(async (folder) => {
-      await writeSession(folder, { token: "t".repeat(40), member: "jimmy" }, "k".repeat(32));
-      expect(await readAuth(folder)).toEqual({ token: "t".repeat(40), member: "jimmy", key: "k".repeat(32) });
-    }));
-
-  test("an older login gets the key added, keeping other fields and the mode, once", () =>
-    inFolder(async (folder) => {
-      const path = join(folder, "auth.json");
-      writeFileSync(path, JSON.stringify({ token: "t", member: "m", extra: 1 }), { mode: 0o600 });
-      await syncSessionKey(folder, "k".repeat(32));
-      expect(await readAuth(folder)).toEqual({ token: "t", member: "m", extra: 1, key: "k".repeat(32) });
-      expect(statSync(path).mode & 0o777).toBe(0o600);
-      const stamp = statSync(path).mtimeMs;
-      await new Promise((done) => setTimeout(done, 20));
-      await syncSessionKey(folder, "k".repeat(32));
-      expect(statSync(path).mtimeMs).toBe(stamp);
-    }));
-
-  test("no login or an empty key writes nothing", () =>
-    inFolder(async (folder) => {
-      await syncSessionKey(folder, "k".repeat(32));
-      expect(await Bun.file(join(folder, "auth.json")).exists()).toBe(false);
-      writeFileSync(join(folder, "auth.json"), JSON.stringify({ token: "t" }));
-      await syncSessionKey(folder, "");
-      expect(await readAuth(folder)).toEqual({ token: "t" });
-    }));
 });

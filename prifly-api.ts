@@ -254,7 +254,29 @@ export type ExtensionTool = {
   call(args: Record<string, unknown>, ctx: ExtensionToolContext): Promise<string>;
 };
 
+/** What the extension asks the vault to keep: a login token, confirmed by the reader. */
+export type VaultFileRequest = { token: string; label?: string; host?: string; why: string };
+
+export type VaultFileResult =
+  | { outcome: "accepted"; level: 1 | 2 | 4 }
+  | { outcome: "declined" }
+  | { outcome: "timed out" }
+  | { outcome: "refused"; message: string };
+
+/**
+ * The entries of the manifest's `vault` list. `read` is null for a missing
+ * entry or one above level 1. `file` and `forget` are there where
+ * `api.features` includes "vault-file".
+ */
+export type ExtensionVaultApi = {
+  read(name: string): Promise<string | null>;
+  file?(name: string, request: VaultFileRequest): Promise<VaultFileResult>;
+  forget?(name: string): Promise<boolean>;
+};
+
 export type ExtensionApi = {
+  /** The vault entries this extension's manifest names. Absent on a prifly without a vault. */
+  vault?: ExtensionVaultApi;
   /**
    * The values of the manifest's `settings`, defaults filled in, current at
    * each read. Where `api.features` includes "settings".

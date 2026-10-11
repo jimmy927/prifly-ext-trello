@@ -9,7 +9,7 @@
  * again, one step further on.
  */
 
-import { authorizeUrl, forgetSession, looksLikeToken, whoami, writeSession } from "./auth";
+import { authorizeUrl, forgetSession, keepSession, looksLikeToken, whoami } from "./auth";
 import { openBrowser } from "./open-browser";
 import type { Launch, LaunchChoice } from "./prifly-api";
 import { myBoards } from "./trello";
@@ -99,7 +99,7 @@ function loginRows(): LaunchChoice[] {
       key: KEYS.token,
       title: "2. Paste the token Trello shows you",
       group: "Log in",
-      detail: "Trello ends the approval with a token to copy. It is kept on this machine only.",
+      detail: "Trello ends the approval with a token to copy. It is kept in prifly's vault, or on this machine only.",
       tone: "info",
       input: { title: "The token from Trello", placeholder: "the long word Trello shows after you approve" },
     },
@@ -160,8 +160,14 @@ async function saveToken(world: World, input: string): Promise<Launch> {
   // Asked of Trello before it is kept: a token that does not work should fail
   // here, where the reader is looking, not quietly an hour later.
   const member = await whoami(auth);
-  world.session = { token, member };
-  await writeSession(world.api.folder, world.session, world.config.appKey);
+  const session = { token, member };
+  const refusal = await keepSession(world.api, session);
+  if (refusal !== null) throw new Error(`${refusal} Nothing was kept: pick “2. Paste the token” again to retry.`);
+  world.session = session;
+  // The vault holds only the token. A fresh login is asked about again, whatever was declined before.
+  world.state.member = member;
+  world.state.vaultDeclined = false;
+  await writeState(world.api.folder, world.state);
   world.api.log("logged_in", { member });
   return { prompt: "", message: `Logged in as ${member}. Now choose a board.` };
 }
@@ -183,13 +189,20 @@ async function switchBoard(world: World): Promise<Launch> {
 }
 
 async function logOut(world: World): Promise<Launch> {
-  await forgetSession(world.api.folder);
+  const kept = await forgetSession(world.api);
   world.session = null;
   world.state.board = "";
   world.state.boardName = "";
+  world.state.member = "";
+  world.state.vaultDeclined = false;
   await writeState(world.api.folder, world.state);
   world.cards = [];
   world.lists = [];
   world.api.log("logged_out", { ready: ready(world) });
-  return { prompt: "", message: "Logged out. The token on this machine is gone." };
+  return {
+    prompt: "",
+    message: kept
+      ? "Logged out, but the vault entry “trello” is yours, not this extension's: remove it in the Vault dialog, or the next start logs you in again."
+      : "Logged out. The saved token is gone.",
+  };
 }

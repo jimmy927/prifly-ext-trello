@@ -2,9 +2,11 @@
 """
 Trello CLI: search/read cards and download attachments.
 
-Credentials come from the prifly Trello extension this skill ships with: the
-app key and the token from its auth.json (the key the token was issued under
-sits beside it), which the reader made by logging in to Trello from prifly.
+Credentials come from the prifly Trello extension this skill ships with. The
+app key (no secret) is in its app.json. The token is in prifly's vault as the
+entry "trello": run this script through the vault_run tool with entry "trello",
+which hands it over as TRELLO_TOKEN. A prifly without the vault keeps the token
+in the extension's auth.json instead, and this script reads it there.
 TRELLO_API_KEY and TRELLO_TOKEN override both, for a machine that has no prifly on it.
 """
 
@@ -30,7 +32,7 @@ def extension_roots() -> list[Path]:
     it. Then prifly's extensions folder, because Claude Code installs a plugin
     by copying it into its cache, and the copy has no auth.json: the login
     belongs to the extension the reader actually enabled, not to every copy of
-    the script.
+    the script. The same goes for `app.json`.
     """
     here = Path(__file__).resolve().parent.parent.parent
     named = os.environ.get("PRIFLY_TRELLO_HOME")
@@ -60,10 +62,17 @@ def load_creds() -> tuple[str, str]:
                 return str(found)
         return None
 
-    key = key or read("auth.json", "key")
+    # auth.json's key is from before app.json.
+    key = key or read("app.json", "key") or read("auth.json", "key")
     tok = tok or read("auth.json", "token")
     if key and tok:
         return key, tok
+    if key:
+        sys.exit(
+            "no Trello token: the login is in prifly's vault. Run this script with the "
+            "vault_run tool, entry \"trello\" (it sets TRELLO_TOKEN), or log in from prifly: "
+            "'From a Trello card…' (or set TRELLO_TOKEN)"
+        )
     sys.exit(
         "not logged in to Trello: open prifly, set the Trello app key in Extensions, click "
         "'From a Trello card…' and log in "

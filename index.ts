@@ -16,7 +16,7 @@
  */
 
 import { join } from "node:path";
-import { syncSessionKey } from "./auth";
+import { writeAppKey } from "./auth";
 import { cardFace, cardItem, shortDate } from "./card-face";
 import { cardPrompt } from "./card-prompt";
 import { LINK_ACTION, withLink } from "./link-actions";
@@ -63,6 +63,7 @@ import {
   linkCard,
   listNamed,
   load,
+  moveLogin,
   ready,
   reload,
   unlinkCard,
@@ -81,7 +82,8 @@ export async function activate(api: ExtensionApi): Promise<() => void> {
       world = null;
     };
   }
-  if (world.session !== null) await syncSessionKey(api.folder, world.config.appKey);
+  await writeAppKey(api.folder, world.config.appKey);
+  void moveLogin(world);
   api.tools?.register([summaryTool(() => (world === null ? null : creds(world)))]);
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -98,7 +100,7 @@ export async function activate(api: ExtensionApi): Promise<() => void> {
     const before = world.config.refreshSeconds;
     world.config = configFromSettings(values);
     if (world.config.refreshSeconds !== before) arm();
-    if (world.session !== null) void syncSessionKey(api.folder, world.config.appKey);
+    void writeAppKey(api.folder, world.config.appKey);
     // The chips carry what the archive dialog picks first, and the done tone: drawn again.
     if (ready(world)) show();
   });
