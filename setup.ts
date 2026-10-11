@@ -17,7 +17,6 @@ import { changeState, creds, hasSettings, ready, type World } from "./world";
 
 /** The keys this file answers to; a card's key is its short link. */
 const KEYS = {
-  appKey: "setup:app-key",
   open: "setup:open-login",
   token: "setup:paste-token",
   board: "setup:board:",
@@ -31,12 +30,11 @@ export function isSetupKey(key: string): boolean {
 }
 
 /**
- * The rows that come before any card: the app key, the login, the board. Null
+ * The rows that come before any card: the login, the board. Null
  * once there is nothing left to settle.
  */
 export async function setupChoices(world: World): Promise<LaunchChoice[] | null> {
   if (!hasSettings(world.api)) return [updateRow()];
-  if (world.config.appKey === "") return [appKeyRow()];
   if (world.session === null) return loginRows();
   if (world.state.board === "") return await boardRows(world);
   return null;
@@ -70,18 +68,6 @@ function updateRow(): LaunchChoice {
     group: "Setup",
     detail:
       "This extension is configured in prifly's Extensions dialog, which this version of prifly does not offer. Update prifly, then open this list again.",
-    tone: "warning",
-  };
-}
-
-function appKeyRow(): LaunchChoice {
-  // prifly offers no way to write a setting, so the key is entered where the rest are.
-  return {
-    key: KEYS.appKey,
-    title: "Add a Trello app key in prifly's Extensions dialog",
-    group: "Setup",
-    detail:
-      "Open Extensions, pick Trello board and fill in “Trello app key” (make one at trello.com/power-ups/admin), then open this list again.",
     tone: "warning",
   };
 }
@@ -125,8 +111,6 @@ async function boardRows(world: World): Promise<LaunchChoice[]> {
 /** Carry out one of those rows. Null when the key is not one of them. */
 export async function runSetup(world: World, key: string, input: string): Promise<Launch | null> {
   if (key === KEYS.update) return notice("Update prifly to use this extension, then open this list again.");
-  if (key === KEYS.appKey)
-    return notice("Fill in “Trello app key” in prifly's Extensions dialog, then open this list again.");
   if (key === KEYS.open) return await openLogin(world);
   if (key === KEYS.token) return await saveToken(world, input);
   if (key.startsWith(KEYS.board)) return await chooseBoard(world, key.slice(KEYS.board.length));

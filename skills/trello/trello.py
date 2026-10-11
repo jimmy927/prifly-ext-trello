@@ -74,8 +74,7 @@ def load_creds() -> tuple[str, str]:
             "'From a Trello card…' (or set TRELLO_TOKEN)"
         )
     sys.exit(
-        "not logged in to Trello: open prifly, set the Trello app key in Extensions, click "
-        "'From a Trello card…' and log in "
+        "not logged in to Trello: open prifly, click 'From a Trello card…' and log in "
         "(or set TRELLO_API_KEY and TRELLO_TOKEN)"
     )
 

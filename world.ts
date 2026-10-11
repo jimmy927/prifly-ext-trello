@@ -12,16 +12,16 @@
 
 import { join } from "node:path";
 import type { Session } from "./auth";
-import { moveToVault, readSession } from "./auth";
+import { moveToVault, PRIFLY_APP_KEY, readSession } from "./auth";
 import type { ExtensionApi, SettingValues } from "./prifly-api";
 import type { TrelloCard, TrelloList } from "./trello";
 import { board as boardOf, type Creds, cards as cardsOf, lists as listsOf } from "./trello";
 
 export type Config = {
   /**
-   * The key that names the app to Trello. It reads nothing on its own — the
-   * token does that — and lives here rather than in the code so that a clone
-   * of this repository carries nobody's registration.
+   * The key that names the app to Trello: the reader's own when they set one,
+   * else prifly's (`PRIFLY_APP_KEY`). It reads nothing on its own — the token
+   * does that — and a token only works with the key it was approved for.
    */
   appKey: string;
   /** Where a card's session works; "" leaves the folder to the reader. */
@@ -182,7 +182,7 @@ export function configFromSettings(values: SettingValues): Config {
   };
   const seconds = values["refreshSeconds"];
   return {
-    appKey: text("appKey", "").trim(),
+    appKey: text("appKey", "").trim() || PRIFLY_APP_KEY,
     cwd: text("cwd", "").trim(),
     done: columnList(text("done", "Done")),
     inProgress: text("inProgress", "In Progress"),

@@ -9,8 +9,8 @@
   "settings": [
     {
       "id": "appKey",
-      "label": "Trello app key",
-      "description": "The key that names this app to Trello; it reads nothing on its own, your login does that. Make one at trello.com/power-ups/admin (new Power-Up, API key tab).",
+      "label": "Your own Trello app key (optional)",
+      "description": "Leave empty to use prifly's own app key. Fill it in only to use your own Trello app (trello.com/apps/admin); a token approved for another key needs one new login after you change it.",
       "type": "string",
       "default": ""
     },

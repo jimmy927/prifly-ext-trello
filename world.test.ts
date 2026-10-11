@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { authorizeUrl, PRIFLY_APP_KEY, writeAppKey } from "./auth";
 import { fakeState } from "./fake-state";
 import type { ExtensionApi } from "./prifly-api";
 import { runSetup, setupChoices } from "./setup";
@@ -108,7 +109,7 @@ describe("configFromSettings", () => {
     Bun.env["TRELLO_APP_KEY"] = "e".repeat(32);
     try {
       expect(configFromSettings({})).toEqual({
-        appKey: "",
+        appKey: PRIFLY_APP_KEY,
         cwd: "",
         done: ["Done"],
         inProgress: "In Progress",
@@ -118,6 +119,12 @@ describe("configFromSettings", () => {
       if (before === undefined) delete Bun.env["TRELLO_APP_KEY"];
       else Bun.env["TRELLO_APP_KEY"] = before;
     }
+  });
+
+  test("an empty or blank app key setting falls back to prifly's own", () => {
+    expect(PRIFLY_APP_KEY).toMatch(/^[0-9a-f]{32}$/);
+    expect(configFromSettings({ appKey: "" }).appKey).toBe(PRIFLY_APP_KEY);
+    expect(configFromSettings({ appKey: "  " }).appKey).toBe(PRIFLY_APP_KEY);
   });
 
   test("a refresh rate under 15 seconds is raised to 15", () => {
@@ -153,16 +160,36 @@ describe("a prifly without extension settings", () => {
   });
 });
 
-describe("the app key row", () => {
-  test("points at the Extensions dialog, takes no input and writes nothing", async () => {
+describe("setup without an app key setting", () => {
+  let keyFolder = "";
+  beforeEach(() => {
+    keyFolder = mkdtempSync(join(tmpdir(), "trello-key-"));
+  });
+  afterEach(() => rmSync(keyFolder, { recursive: true, force: true }));
+
+  test("the chooser starts at the login rows and the login page uses prifly's key", async () => {
     const world = await load(fakeApi({}));
     const rows = await setupChoices(world);
-    expect(rows).toHaveLength(1);
-    expect(rows?.[0]?.input).toBeUndefined();
-    expect(rows?.[0]?.title).toContain("Extensions");
-    const launch = await runSetup(world, "setup:app-key", "c".repeat(32));
-    expect(launch?.message).toContain("Extensions");
-    expect(world.config.appKey).toBe("");
+    expect(rows?.map((row) => row.title)).toEqual([
+      "1. Open the Trello login page",
+      "2. Paste the token Trello shows you",
+    ]);
+    expect(world.config.appKey).toBe(PRIFLY_APP_KEY);
+    expect(authorizeUrl(world.config.appKey)).toContain(`key=${PRIFLY_APP_KEY}`);
+  });
+
+  test("a key of the reader's own wins", async () => {
+    const own = "d".repeat(32);
+    const world = await load(fakeApi({ appKey: own }));
+    expect(world.config.appKey).toBe(own);
+    expect(authorizeUrl(world.config.appKey)).toContain(`key=${own}`);
+  });
+
+  test("app.json for the skill gets the effective key", async () => {
+    await writeAppKey(keyFolder, configFromSettings({}).appKey);
+    expect(await Bun.file(join(keyFolder, "app.json")).json()).toEqual({ key: PRIFLY_APP_KEY });
+    await writeAppKey(keyFolder, configFromSettings({ appKey: "d".repeat(32) }).appKey);
+    expect(await Bun.file(join(keyFolder, "app.json")).json()).toEqual({ key: "d".repeat(32) });
   });
 });
 

@@ -14,7 +14,8 @@ In prifly: status bar → the puzzle icon → Install from
 `https://github.com/jimmy927/prifly-ext-trello`, then tick it to enable it. Or
 clone this repository into `~/.local/share/prifly/extensions/`.
 
-Then open **From a Trello card…** and follow the two rows it shows:
+There is nothing to configure and no Trello app to make. Open **From a Trello
+card…** and follow the two rows it shows:
 
 1. **Open the Trello login page** — your browser opens Trello's own approval
    page. Sign in however you normally do (Google, Microsoft, Atlassian); prifly
@@ -33,17 +34,18 @@ config file to write, and the board can be changed later from the same list
 
 ### The app key
 
-Trello wants two things on every call: a **token**, which is you, and an **app
-key**, which is the name of the app asking. The token comes from your login and
-reaches your boards and nobody else's. The key reads nothing on its own — it is
-the same idea as the GitHub CLI's client id.
+Trello wants a **token** (you) and an **app key** (the app asking) on every call.
+prifly ships its own app key, which is public by design — it reads nothing on its
+own — so setup is just logging in and picking a board. To use your own Trello app
+instead, put its key in the setting below ([trello.com/apps/admin](https://trello.com/apps/admin));
+a token approved for another key needs one new login after you change it.
 
-This repository ships no key, so you enter one. It is a setting, like the rest
-of the plain configuration, in prifly's **Extensions** dialog (Trello board):
+The plain configuration is a set of settings in prifly's **Extensions** dialog
+(Trello board):
 
 | Setting | What it is |
 | --- | --- |
-| Trello app key | The key. Make one at [trello.com/power-ups/admin](https://trello.com/power-ups/admin) — new Power-Up, then the API key tab. |
+| Your own Trello app key (optional) | Empty uses prifly's key. A key you set wins. |
 | Folder a card's session works in (`cwd`) | Typed as your system writes it, e.g. `/home/you/src/app` or `C:\Users\you\src\app`; taken as typed. Empty: you pick it in the New session form as usual. |
 | Columns that mean the work is over (`done`) | Comma-separated, e.g. `Done, Released`; drawn in the quiet colour. |
 | Move the card to this column when a session starts (`inProgress`) | Any case; empty leaves cards where they are. |
@@ -53,12 +55,10 @@ These are stored in prifly's database, so they move with prifly's data (for
 instance to a native Windows host) instead of sitting in a file here. On
 Windows, set the folder once: a Linux path means nothing there.
 
-prifly gives an extension no way to write its settings, so the key is typed in
-the Extensions dialog; until it is, the first row the chooser offers points
-you there. A prifly too old to have extension settings shows one row, "Update
-prifly to use this extension", and the extension does nothing else.
+A prifly too old to have extension settings shows one row, "Update prifly to use
+this extension", and the extension does nothing else.
 
-The key is copied to `app.json` for the Trello skill, which gets the token from
+The key in use (prifly's or yours) is copied to `app.json` for the Trello skill, which gets the token from
 the vault through `vault_run` (entry `trello`).
 
 `auth.json`, `app.json`, an old `state.json` and the downloaded `cards/` are ignored by git:
