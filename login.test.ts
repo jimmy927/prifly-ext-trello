@@ -3,9 +3,20 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { forgetSession, writeAppKey } from "./auth";
+import { type FakeState, fakeState } from "./fake-state";
 import type { ExtensionApi, VaultFileRequest, VaultFileResult } from "./prifly-api";
 import { runSetup } from "./setup";
-import { load, moveLogin, readState } from "./world";
+import { load, moveLogin, parseState, type State } from "./world";
+
+/** prifly's database for the extension, one per test folder: it outlives a fake api, as a restart does. */
+const databases = new Map<string, FakeState>();
+const stateFor = (at: string): FakeState => {
+  const found = databases.get(at) ?? fakeState();
+  databases.set(at, found);
+  return found;
+};
+/** What the extension has kept as its state. */
+const readState = async (at: string): Promise<State> => parseState(await stateFor(at).get("state"));
 
 const TOKEN = "t".repeat(40);
 const OTHER = "o".repeat(40);
@@ -28,7 +39,7 @@ function fakeVault(
   const filed: Fake["filed"] = [];
   const forgotten: string[] = [];
   const logs: string[] = [];
-  const features = options.features ?? ["settings", "vault-file"];
+  const features = options.features ?? ["settings", "vault-file", "state"];
   const answer = options.answer ?? "accepted";
   const vault = features.includes("vault-file")
     ? {
@@ -56,6 +67,7 @@ function fakeVault(
     log: (event: string, fields?: Record<string, unknown>) =>
       logs.push(`${event} ${JSON.stringify(fields ?? {})}`),
     ...(vault === undefined ? {} : { vault }),
+    ...(features.includes("state") ? { state: stateFor(folder) } : {}),
   } as unknown as ExtensionApi;
   return { api, entries, filed, forgotten, logs };
 }
@@ -73,6 +85,7 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.fetch = realFetch;
   rmSync(folder, { recursive: true, force: true });
+  databases.clear();
 });
 
 const authPath = () => join(folder, "auth.json");
@@ -96,7 +109,7 @@ describe("logging in", () => {
     expect(fake.entries.get("trello") === TOKEN).toBe(true);
     expect(existsSync(authPath())).toBe(false);
     expect(world.session?.member).toBe("jimmy");
-    // The name is not a secret and the vault holds only the token: it is kept in state.json.
+    // The name is not a secret and the vault holds only the token: it is kept in prifly's state.
     expect((await readState(folder)).member).toBe("jimmy");
   });
 
@@ -134,10 +147,10 @@ describe("logging in", () => {
 });
 
 describe("reading the login", () => {
-  test("from the vault, with the name kept in state.json", async () => {
+  test("from the vault, with the name kept in prifly's state", async () => {
     const fake = fakeVault(folder);
     fake.entries.set("trello", TOKEN);
-    writeFileSync(join(folder, "state.json"), JSON.stringify({ member: "jimmy" }));
+    await stateFor(folder).set("state", { member: "jimmy" });
     const world = await load(fake.api);
     expect(world.session?.token === TOKEN).toBe(true);
     expect(world.session?.member).toBe("jimmy");

@@ -274,7 +274,36 @@ export type ExtensionVaultApi = {
   forget?(name: string): Promise<boolean>;
 };
 
+/** `api.state` (prifly's `state.ts`): documents and logs kept in prifly's database. */
+export type ExtensionStateApi = {
+  get<T = unknown>(name: string): Promise<NoInfer<T> | undefined>;
+  set(name: string, value: unknown): Promise<void>;
+  /** Read-modify-write; writes to a name run one at a time, in call order. */
+  update<T>(name: string, fn: (current: T | undefined) => T | Promise<T>): Promise<T>;
+  delete(name: string): Promise<boolean>;
+  list(): Promise<string[]>;
+  /** Store `make`'s value once, unless the document exists; undefined from `make` stores nothing. */
+  importOnce<T>(
+    name: string,
+    make: () => T | undefined | Promise<T | undefined>,
+  ): Promise<T | undefined>;
+  append(name: string, entry: unknown): Promise<number>;
+  read<T = unknown>(
+    name: string,
+    options?: ExtensionLogRead,
+  ): Promise<ExtensionLogEntry<NoInfer<T>>[]>;
+};
+
+export type ExtensionLogRead = { after?: number; since?: number; limit?: number };
+
+export type ExtensionLogEntry<T = unknown> = { seq: number; at: number; entry: T };
+
 export type ExtensionApi = {
+  /**
+   * What the extension keeps for itself, in prifly's database: it moves with
+   * prifly's data. Where `api.features` includes "state".
+   */
+  state?: ExtensionStateApi;
   /** The vault entries this extension's manifest names. Absent on a prifly without a vault. */
   vault?: ExtensionVaultApi;
   /**

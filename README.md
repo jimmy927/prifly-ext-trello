@@ -61,8 +61,15 @@ prifly to use this extension", and the extension does nothing else.
 The key is copied to `app.json` for the Trello skill, which gets the token from
 the vault through `vault_run` (entry `trello`).
 
-`auth.json`, `app.json`, `state.json` and the downloaded `cards/` are ignored by git:
+`auth.json`, `app.json`, an old `state.json` and the downloaded `cards/` are ignored by git:
 nothing about your account or your board is ever committed.
+
+The board you chose, each session's cards and the other things the extension
+remembers live in prifly's database (`api.state`), so `prifly-move` carries them
+to another machine. A `state.json` left by an earlier version is imported once
+and never read or written again. A prifly too old to have `api.state` logs
+`needs_newer_prifly` once and keeps these in memory until the extension stops;
+it writes no files.
 
 ## The board
 
@@ -80,7 +87,7 @@ In it you can
 - **ignore a card** — "Never start a session from this" in its right-click
   menu takes a card that is not software work off the board for good. "Show
   ignored cards" at the end of the board lists them, and "Show on the board
-  again" in their menu brings one back. Kept in `state.json`;
+  again" in their menu brings one back. Kept in prifly's database;
 - **start a session from a card** — the button in the card, its right-click
   menu, or a double-click on it. The card moves to the `inProgress` column
   (In Progress) as the session starts;
@@ -120,7 +127,7 @@ In it you can
 ## How a card finds its session
 
 prifly hands the extension the id of the session a launch became, and the pair
-is kept in `state.json` here. A card therefore belongs to the session that was
+is kept in prifly's database (`api.state`) here. A card therefore belongs to the session that was
 started from it — nothing else claims a card, and an existing session cannot be
 adopted by one.
 

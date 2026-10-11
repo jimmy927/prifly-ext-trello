@@ -12,7 +12,7 @@
  * it offers the login; you sign in on Trello's own page however you normally
  * do, approve prifly, and then pick which of your boards to show. See
  * `setup.ts` for that, `auth.ts` for what is kept where, and `world.ts` for
- * the small files this folder holds.
+ * what this extension keeps.
  */
 
 import { join } from "node:path";
@@ -57,6 +57,7 @@ import {
 } from "./trello";
 import {
   type Config,
+  changeState,
   configFromSettings,
   creds,
   hasSettings,
@@ -68,7 +69,6 @@ import {
   reload,
   unlinkCard,
   type World,
-  writeState,
 } from "./world";
 
 let world: World | null = null;
@@ -502,8 +502,7 @@ function typeOf(path: string): string | null {
  */
 export async function launched(_launchId: string, key: string, sessionId: string): Promise<void> {
   const at = here();
-  linkCard(at.state, sessionId, key);
-  await writeState(at.api.folder, at.state);
+  await changeState(at, (state) => linkCard(state, sessionId, key));
   await startWork(at, key);
   show();
 }
@@ -556,9 +555,10 @@ async function carryOut(
   picked?: ActionPicked,
 ): Promise<string> {
   if (actionId === "ignore" || actionId === "unignore") {
-    const rest = at.state.ignored.filter((shortLink) => shortLink !== key);
-    at.state.ignored = actionId === "ignore" ? [...rest, key] : rest;
-    await writeState(at.api.folder, at.state);
+    await changeState(at, (state) => {
+      const rest = state.ignored.filter((shortLink) => shortLink !== key);
+      state.ignored = actionId === "ignore" ? [...rest, key] : rest;
+    });
     at.api.log(actionId === "ignore" ? "ignored" : "unignored", { card: key });
     return actionId === "ignore"
       ? `“${name}” is off the board. “Show ignored cards” at the end brings it back.`
@@ -598,8 +598,7 @@ function unlinkAction(sessionId: string): DecorationAction {
 
 /** A session that was not started from the card, given its chip anyway — beside the ones it has. */
 async function link(at: World, key: string, sessionId: string): Promise<string> {
-  linkCard(at.state, sessionId, key);
-  await writeState(at.api.folder, at.state);
+  await changeState(at, (state) => linkCard(state, sessionId, key));
   show();
   at.api.log("linked", { card: key, session: sessionId.slice(0, 8) });
   const title = sessionById(at.api, sessionId)?.title;
@@ -624,8 +623,7 @@ async function askSummary(at: World, key: string, sessionId: string): Promise<st
 
 /** A link made by mistake, undone from the chip: the card itself is left alone in Trello. */
 async function unlink(at: World, key: string, sessionId: string, name: string): Promise<string> {
-  unlinkCard(at.state, sessionId, key);
-  await writeState(at.api.folder, at.state);
+  await changeState(at, (state) => unlinkCard(state, sessionId, key));
   show();
   at.api.log("unlinked", { card: key, session: sessionId.slice(0, 8) });
   const title = sessionById(at.api, sessionId)?.title;

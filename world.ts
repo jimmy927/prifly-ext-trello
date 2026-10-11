@@ -2,11 +2,12 @@
  * What this extension knows while it runs, and what it keeps between runs.
  *
  * The plain configuration (app key, where a card's session works, …) is
- * prifly's extension settings, never a file (`configFromSettings`). Two small
- * files sit next to this one, neither in git: `auth.json` (the reader's own
- * Trello token where the vault is not used — `auth.ts`) and `state.json` (which board they chose and which
- * session is on which card). Nothing here is shared, and nothing is anybody's
- * but the reader's.
+ * prifly's extension settings, never a file (`configFromSettings`). What the
+ * extension remembers — which board they chose, which session is on which
+ * card — is prifly's database (`api.state`, the `state` document), so it moves
+ * with prifly's data. Only `auth.json` (the reader's own Trello token where
+ * the vault is not used — `auth.ts`) sits next to this file, not in git.
+ * Nothing here is shared, and nothing is anybody's but the reader's.
  */
 
 import { join } from "node:path";
@@ -78,7 +79,20 @@ export function ready(world: World): boolean {
 }
 
 export async function load(api: ExtensionApi): Promise<World> {
-  const state = await readState(api.folder);
+  // Settings and state live in prifly's database. A prifly without state gets
+  // no files instead: state that lasts until the extension stops.
+  if (!hasState(api)) {
+    api.log("needs_newer_prifly", {
+      missing: "state",
+      message:
+        "This extension keeps its board choice and card links in prifly's database; this prifly lacks that, so they last only until the extension stops. Update prifly.",
+    });
+  }
+  const store = api.state;
+  const state =
+    store !== undefined && hasState(api)
+      ? parseState(await store.importOnce(STATE_DOC, () => legacyState(api.folder)))
+      : parseState({});
   return {
     api,
     config: configFromSettings(api.settings ?? {}),
@@ -99,10 +113,16 @@ export async function moveLogin(world: World): Promise<void> {
   if (world.state.vaultDeclined) return;
   try {
     const moved = await moveToVault(world.api);
-    if (moved.outcome === "moved") world.state.member = moved.member;
-    else if (moved.outcome === "declined") world.state.vaultDeclined = true;
-    else return;
-    await writeState(world.api.folder, world.state);
+    if (moved.outcome === "moved") {
+      const member = moved.member;
+      await changeState(world, (state) => {
+        state.member = member;
+      });
+    } else if (moved.outcome === "declined") {
+      await changeState(world, (state) => {
+        state.vaultDeclined = true;
+      });
+    } else return;
   } catch (caught) {
     world.api.log("login_move_failed", {
       message: caught instanceof Error ? caught.message : String(caught),
@@ -121,8 +141,10 @@ export async function reload(world: World): Promise<void> {
   world.lists = lists;
   world.cards = cards;
   if (world.state.boardName === "") {
-    world.state.boardName = (await boardOf(world.state.board, auth)).name;
-    await writeState(world.api.folder, world.state);
+    const name = (await boardOf(world.state.board, auth)).name;
+    await changeState(world, (state) => {
+      state.boardName = name;
+    });
   }
 }
 
@@ -168,28 +190,68 @@ export function configFromSettings(values: SettingValues): Config {
   };
 }
 
-export async function readState(folder: string): Promise<State> {
-  const raw = (await Bun.file(join(folder, "state.json"))
-    .json()
-    .catch(() => ({}))) as Partial<State>;
+/** The document the board choice, card links and the rest live in. */
+const STATE_DOC = "state";
+
+/** Whether this prifly keeps extension state in its database (`api.state`). */
+export function hasState(api: ExtensionApi): boolean {
+  return api.features?.includes("state") === true && api.state !== undefined;
+}
+
+/** The state a stored document (or an old `state.json`) holds; what is missing is empty. */
+export function parseState(value: unknown): State {
+  const raw = (typeof value === "object" && value !== null ? value : {}) as Partial<State>;
   return {
-    board: raw.board ?? "",
-    boardName: raw.boardName ?? "",
+    board: typeof raw.board === "string" ? raw.board : "",
+    boardName: typeof raw.boardName === "string" ? raw.boardName : "",
     links: cardLists(raw.links),
-    ignored: raw.ignored ?? [],
-    member: raw.member ?? "",
+    ignored: Array.isArray(raw.ignored)
+      ? raw.ignored.filter((id): id is string => typeof id === "string")
+      : [],
+    member: typeof raw.member === "string" ? raw.member : "",
     vaultDeclined: raw.vaultDeclined === true,
   };
 }
 
-export async function writeState(folder: string, state: State): Promise<void> {
-  await Bun.write(join(folder, "state.json"), JSON.stringify(state, null, 2));
+/**
+ * Change the state. With `api.state` the change is made on the stored
+ * document inside `update`, so two writes at once cannot lose each other's
+ * change, and `world.state` then takes the result; without it the change is
+ * made on `world.state` alone and lasts until the extension stops.
+ */
+export async function changeState(world: World, mutate: (state: State) => void): Promise<void> {
+  const store = world.api.state;
+  if (store === undefined || !hasState(world.api)) {
+    mutate(world.state);
+    return;
+  }
+  const kept = await store.update<unknown>(STATE_DOC, (current) => {
+    const next = parseState(current);
+    mutate(next);
+    return next;
+  });
+  Object.assign(world.state, parseState(kept));
+}
+
+/**
+ * What a `state.json` from before `api.state` holds, for `importOnce`;
+ * undefined when there is none (or it is not JSON), which stores nothing. It
+ * is read only while nothing was imported, and never written.
+ */
+async function legacyState(folder: string): Promise<State | undefined> {
+  const file = Bun.file(join(folder, "state.json"));
+  if (!(await file.exists())) return undefined;
+  try {
+    return parseState(await file.json());
+  } catch {
+    return undefined;
+  }
 }
 
 /**
  * Each session's card short links. A `state.json` from before a session could
  * carry several cards holds one short link as a string; it is read as a list
- * of one.
+ * of one (imported data keeps that compatibility).
  */
 export function cardLists(raw: unknown): Record<string, string[]> {
   const kept: Record<string, string[]> = {};

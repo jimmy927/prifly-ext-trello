@@ -13,7 +13,7 @@ import { authorizeUrl, forgetSession, keepSession, looksLikeToken, whoami } from
 import { openBrowser } from "./open-browser";
 import type { Launch, LaunchChoice } from "./prifly-api";
 import { myBoards } from "./trello";
-import { creds, hasSettings, ready, type World, writeState } from "./world";
+import { changeState, creds, hasSettings, ready, type World } from "./world";
 
 /** The keys this file answers to; a card's key is its short link. */
 const KEYS = {
@@ -165,37 +165,41 @@ async function saveToken(world: World, input: string): Promise<Launch> {
   if (refusal !== null) throw new Error(`${refusal} Nothing was kept: pick “2. Paste the token” again to retry.`);
   world.session = session;
   // The vault holds only the token. A fresh login is asked about again, whatever was declined before.
-  world.state.member = member;
-  world.state.vaultDeclined = false;
-  await writeState(world.api.folder, world.state);
+  await changeState(world, (state) => {
+    state.member = member;
+    state.vaultDeclined = false;
+  });
   world.api.log("logged_in", { member });
   return { prompt: "", message: `Logged in as ${member}. Now choose a board.` };
 }
 
 async function chooseBoard(world: World, value: string): Promise<Launch> {
   const [id = "", name = ""] = value.split("|");
-  world.state.board = id;
-  world.state.boardName = name;
-  await writeState(world.api.folder, world.state);
+  await changeState(world, (state) => {
+    state.board = id;
+    state.boardName = name;
+  });
   world.api.log("board_chosen", { board: id });
   return { prompt: "", message: `Showing ${name}.` };
 }
 
 async function switchBoard(world: World): Promise<Launch> {
-  world.state.board = "";
-  world.state.boardName = "";
-  await writeState(world.api.folder, world.state);
+  await changeState(world, (state) => {
+    state.board = "";
+    state.boardName = "";
+  });
   return { prompt: "", message: "" };
 }
 
 async function logOut(world: World): Promise<Launch> {
   const kept = await forgetSession(world.api);
   world.session = null;
-  world.state.board = "";
-  world.state.boardName = "";
-  world.state.member = "";
-  world.state.vaultDeclined = false;
-  await writeState(world.api.folder, world.state);
+  await changeState(world, (state) => {
+    state.board = "";
+    state.boardName = "";
+    state.member = "";
+    state.vaultDeclined = false;
+  });
   world.cards = [];
   world.lists = [];
   world.api.log("logged_out", { ready: ready(world) });

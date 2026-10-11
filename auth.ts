@@ -88,7 +88,7 @@ async function readLegacy(folder: string): Promise<Session | null> {
  * The login: the vault's token when it reads one, else `auth.json`'s. The vault
  * reads null for no entry, and for one the reader set above level 1; the file
  * still answers while a move has not happened yet or was declined. `member`
- * is the name kept in `state.json` beside a vault token.
+ * is the name kept in prifly's state (`world.ts`) beside a vault token.
  */
 export async function readSession(api: ExtensionApi, member: string): Promise<Session | null> {
   const filed = await api.vault?.read(VAULT_ENTRY).catch(() => null);

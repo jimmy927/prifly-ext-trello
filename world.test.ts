@@ -1,11 +1,17 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fakeState } from "./fake-state";
 import type { ExtensionApi } from "./prifly-api";
 import { runSetup, setupChoices } from "./setup";
 import {
   cardLists,
+  changeState,
   columnList,
   configFromSettings,
   hasSettings,
+  hasState,
   linkCard,
   listNamed,
   load,
@@ -72,6 +78,7 @@ function fakeApi(settings?: Record<string, string | number>): ExtensionApi {
   return {
     folder: "/nonexistent/trello-extension",
     features: settings === undefined ? [] : ["settings"],
+    log: () => {},
     ...(settings === undefined ? {} : { settings }),
   } as unknown as ExtensionApi;
 }
@@ -156,5 +163,129 @@ describe("the app key row", () => {
     const launch = await runSetup(world, "setup:app-key", "c".repeat(32));
     expect(launch?.message).toContain("Extensions");
     expect(world.config.appKey).toBe("");
+  });
+});
+
+/** A prifly api with `api.state` in memory (when `withState`), an extension folder and a log. */
+function stateApi(folder: string, withState = true) {
+  const database = fakeState();
+  const logs: string[] = [];
+  const api = {
+    folder,
+    features: withState ? ["settings", "state"] : ["settings"],
+    settings: {},
+    log: (event: string) => logs.push(event),
+    ...(withState ? { state: database } : {}),
+  } as unknown as ExtensionApi;
+  return { api, database, logs };
+}
+
+describe("state in prifly's database", () => {
+  let folder = "";
+  beforeEach(() => {
+    folder = mkdtempSync(join(tmpdir(), "trello-state-"));
+  });
+  afterEach(() => {
+    rmSync(folder, { recursive: true, force: true });
+  });
+
+  const legacy = {
+    board: "b1",
+    boardName: "Work",
+    links: { s1: "abc", s2: ["d", "e"] },
+    ignored: ["x"],
+    member: "jimmy",
+    vaultDeclined: true,
+  };
+
+  test("an existing state.json is imported once, with a one-card link read as a list", async () => {
+    writeFileSync(join(folder, "state.json"), JSON.stringify(legacy));
+    const { api, database } = stateApi(folder);
+    const world = await load(api);
+    expect(world.state).toEqual({ ...legacy, links: { s1: ["abc"], s2: ["d", "e"] } });
+    expect(JSON.parse(database.docs.get("state") ?? "null")).toEqual(world.state);
+  });
+
+  test("an imported state.json is never read or written again", async () => {
+    writeFileSync(join(folder, "state.json"), JSON.stringify(legacy));
+    const { api, database } = stateApi(folder);
+    await load(api);
+    // Changed after the import: the database is the truth, the file is ignored.
+    const other = JSON.stringify({ board: "other" });
+    writeFileSync(join(folder, "state.json"), other);
+    const again = await load(api);
+    expect(again.state.board).toBe("b1");
+    await changeState(again, (state) => {
+      state.board = "b2";
+    });
+    expect(readFileSync(join(folder, "state.json"), "utf8")).toBe(other);
+    expect((await load(api)).state.board).toBe("b2");
+    // The import, then the one change.
+    expect(database.writes()).toBe(2);
+  });
+
+  test("no state.json starts empty and stores nothing, so a later start asks again", async () => {
+    const { api, database } = stateApi(folder);
+    const world = await load(api);
+    expect(world.state).toEqual(state({}));
+    expect(database.docs.has("state")).toBe(false);
+    writeFileSync(join(folder, "state.json"), JSON.stringify({ board: "late" }));
+    expect((await load(api)).state.board).toBe("late");
+  });
+
+  test("a state.json that is not JSON imports nothing", async () => {
+    writeFileSync(join(folder, "state.json"), "{ not json");
+    const { api, database } = stateApi(folder);
+    expect((await load(api)).state).toEqual(state({}));
+    expect(database.docs.has("state")).toBe(false);
+  });
+
+  test("changes persist through a restart", async () => {
+    const { api } = stateApi(folder);
+    const world = await load(api);
+    await changeState(world, (at) => {
+      at.board = "b1";
+      at.boardName = "Work";
+      linkCard(at, "s1", "abc");
+    });
+    expect(world.state.links).toEqual({ s1: ["abc"] });
+    const restarted = await load(api);
+    expect(restarted.state).toEqual({ ...state({ s1: ["abc"] }), board: "b1", boardName: "Work" });
+  });
+
+  test("two changes at once both land", async () => {
+    const { api } = stateApi(folder);
+    const world = await load(api);
+    await Promise.all([
+      changeState(world, (at) => linkCard(at, "s1", "a")),
+      changeState(world, (at) => linkCard(at, "s1", "b")),
+      changeState(world, (at) => linkCard(at, "s2", "c")),
+    ]);
+    expect((await load(api)).state.links).toEqual({ s1: ["a", "b"], s2: ["c"] });
+  });
+
+  test("without the state feature: logged once, kept in memory, no files written", async () => {
+    writeFileSync(join(folder, "state.json"), JSON.stringify(legacy));
+    const { api, logs } = stateApi(folder, false);
+    const world = await load(api);
+    expect(logs.filter((event) => event === "needs_newer_prifly")).toHaveLength(1);
+    // The old file is not even imported.
+    expect(world.state).toEqual(state({}));
+    await changeState(world, (at) => {
+      at.board = "b9";
+      linkCard(at, "s1", "abc");
+    });
+    expect(world.state.board).toBe("b9");
+    expect(world.state.links).toEqual({ s1: ["abc"] });
+    expect(readdirSync(folder)).toEqual(["state.json"]);
+    expect(readFileSync(join(folder, "state.json"), "utf8")).toBe(JSON.stringify(legacy));
+    expect(logs.filter((event) => event === "needs_newer_prifly")).toHaveLength(1);
+  });
+
+  test("hasState needs both the feature and the api", () => {
+    expect(hasState(stateApi(folder).api)).toBe(true);
+    expect(hasState(stateApi(folder, false).api)).toBe(false);
+    expect(hasState({ features: ["state"] } as unknown as ExtensionApi)).toBe(false);
+    expect(hasState({ features: [], state: fakeState() } as unknown as ExtensionApi)).toBe(false);
   });
 });
