@@ -34,21 +34,38 @@ key**, which is the name of the app asking. The token comes from your login and
 reaches your boards and nobody else's. The key reads nothing on its own — it is
 the same idea as the GitHub CLI's client id.
 
-This repository ships no key, so `config.json` here holds one:
+This repository ships no key, so you enter one. It is a setting, like the rest
+of the plain configuration, in prifly's **Extensions** dialog (Trello board):
+
+| Setting | What it is |
+| --- | --- |
+| Trello app key | The key. Make one at [trello.com/power-ups/admin](https://trello.com/power-ups/admin) — new Power-Up, then the API key tab. Empty falls back to `TRELLO_APP_KEY`. |
+| Folder a card's session works in (`cwd`) | Typed as your system writes it, e.g. `/home/you/src/app` or `C:\Users\you\src\app`; taken as typed. Empty: you pick it in the New session form as usual. |
+| Columns that mean the work is over (`done`) | Comma-separated, e.g. `Done, Released`; drawn in the quiet colour. |
+| Move the card to this column when a session starts (`inProgress`) | Any case; empty leaves cards where they are. |
+| Refresh the board every (`refreshSeconds`) | At least 15. A change takes effect at once. |
+
+These are stored in prifly's database, so they move with prifly's data (for
+instance to a native Windows host) instead of sitting in a file here. On
+Windows, set the folder once: a Linux path means nothing there.
+
+**Upgrading from `config.json`.** prifly gives an extension no way to write or
+import its settings, so they are not carried over: enter your old values in the
+Extensions dialog once. With prifly's settings available, `config.json` is no
+longer read (you may delete it). On a prifly without extension settings
+(`api.features` lacks `"settings"`) nothing changes: `config.json` is read as
+before, and the first row the chooser offers still takes a pasted app key and
+writes it there:
 
 ```json
 { "appKey": "…", "cwd": "", "done": ["Done"], "inProgress": "In Progress", "refreshSeconds": 60 }
 ```
 
-Make one at [trello.com/power-ups/admin](https://trello.com/power-ups/admin) —
-new Power-Up, then the API key tab — or paste it into the first row the chooser
-offers when there is none. `cwd` is the folder a card's session starts in; left
-empty you pick it in the New session form as usual. `done` names the columns
-that mean the work is over, drawn in the quiet colour. `inProgress` names the
-column a card moves to when a session is started from it (any case; `""`
-leaves cards where they are).
+With settings available that first row instead points you to the Extensions
+dialog, as prifly offers nothing to write the key with.
 
-`config.json`, `auth.json`, `state.json` and the downloaded `cards/` are all
+`auth.json`, `state.json` (and `config.json`, where it is used) and the
+downloaded `cards/` are all
 ignored by git: nothing about your account or your board is ever committed.
 
 ## The board

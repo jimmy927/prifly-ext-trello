@@ -7,6 +7,42 @@
   "prompt": "prompt.md",
   "settings": [
     {
+      "id": "appKey",
+      "label": "Trello app key",
+      "description": "The key that names this app to Trello; it reads nothing on its own, your login does that. Make one at trello.com/power-ups/admin (new Power-Up, API key tab). Empty falls back to the TRELLO_APP_KEY environment variable.",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "cwd",
+      "label": "Folder a card's session works in",
+      "description": "Typed as your system writes it, e.g. /home/you/src/app or C:\\Users\\you\\src\\app. Empty leaves the folder to you in the New session form.",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "done",
+      "label": "Columns that mean the work is over",
+      "description": "Comma-separated column names, e.g. Done, Released (matched exactly). Cards in them are drawn in the quiet colour.",
+      "type": "string",
+      "default": "Done"
+    },
+    {
+      "id": "inProgress",
+      "label": "Move the card to this column when a session starts",
+      "description": "The column name (any case) a card moves to when a session is started from it. Empty leaves the card where it is.",
+      "type": "string",
+      "default": "In Progress"
+    },
+    {
+      "id": "refreshSeconds",
+      "label": "Refresh the board every (seconds)",
+      "description": "How often the board is fetched again from Trello. At least 15.",
+      "type": "number",
+      "default": 60,
+      "min": 15
+    },
+    {
       "id": "summaryOnArchive",
       "label": "Post a summary on the card when a session is archived",
       "description": "Ticked at first in the archive dialog: the session gets one more turn to write what it did, for the people on the board, and posts it on the card with pictures of the change. Untick it there to skip it once.",

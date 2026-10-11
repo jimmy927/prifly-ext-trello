@@ -13,7 +13,7 @@ import { authorizeUrl, forgetSession, looksLikeToken, whoami, writeSession } fro
 import { openBrowser } from "./open-browser";
 import type { Launch, LaunchChoice } from "./prifly-api";
 import { myBoards } from "./trello";
-import { creds, ready, type World, writeConfig, writeState } from "./world";
+import { creds, hasSettings, ready, type World, writeConfig, writeState } from "./world";
 
 /** The keys this file answers to; a card's key is its short link. */
 const KEYS = {
@@ -34,7 +34,7 @@ export function isSetupKey(key: string): boolean {
  * once there is nothing left to settle.
  */
 export async function setupChoices(world: World): Promise<LaunchChoice[] | null> {
-  if (world.config.appKey === "") return [appKeyRow()];
+  if (world.config.appKey === "") return [appKeyRow(hasSettings(world.api))];
   if (world.session === null) return loginRows();
   if (world.state.board === "") return await boardRows(world);
   return null;
@@ -60,7 +60,18 @@ export function setupTail(world: World): LaunchChoice[] {
   ];
 }
 
-function appKeyRow(): LaunchChoice {
+function appKeyRow(inSettings: boolean): LaunchChoice {
+  // prifly offers no way to write a setting, so the key is entered where the rest are.
+  if (inSettings) {
+    return {
+      key: KEYS.appKey,
+      title: "Add a Trello app key in prifly's Extensions dialog",
+      group: "Setup",
+      detail:
+        "Open Extensions, pick Trello board and fill in “Trello app key” (make one at trello.com/power-ups/admin), then open this list again.",
+      tone: "warning",
+    };
+  }
   return {
     key: KEYS.appKey,
     title: "Add a Trello app key",
@@ -120,6 +131,12 @@ export async function runSetup(world: World, key: string, input: string): Promis
 }
 
 async function saveAppKey(world: World, input: string): Promise<Launch> {
+  if (hasSettings(world.api)) {
+    return {
+      prompt: "",
+      message: "Fill in “Trello app key” in prifly's Extensions dialog, then open this list again.",
+    };
+  }
   const key = input.trim();
   if (!/^[0-9a-fA-F]{16,64}$/.test(key)) throw new Error("That does not look like a Trello key.");
   world.config.appKey = key;

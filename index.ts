@@ -56,7 +56,9 @@ import {
 } from "./trello";
 import {
   type Config,
+  configFromSettings,
   creds,
+  hasSettings,
   linkCard,
   listNamed,
   load,
@@ -72,11 +74,26 @@ let world: World | null = null;
 export async function activate(api: ExtensionApi): Promise<() => void> {
   world = await load(api);
   api.tools?.register([summaryTool(() => (world === null ? null : creds(world)))]);
-  // The chips carry what the archive dialog picks first: drawn again when that changes.
-  api.onSettings?.(() => {
-    if (world !== null && ready(world)) show();
-  });
   let stopped = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const arm = () => {
+    if (timer !== null) clearInterval(timer);
+    if (world === null) return;
+    timer = setInterval(() => {
+      if (!stopped) void tick();
+    }, world.config.refreshSeconds * 1000);
+  };
+  api.onSettings?.((values) => {
+    if (world === null) return;
+    // cwd, done and inProgress apply at next use; a new refresh rate re-arms the timer.
+    if (hasSettings(api)) {
+      const before = world.config.refreshSeconds;
+      world.config = configFromSettings(values);
+      if (world.config.refreshSeconds !== before) arm();
+    }
+    // The chips carry what the archive dialog picks first, and the done tone: drawn again.
+    if (ready(world)) show();
+  });
   const tick = async () => {
     try {
       // Nothing is asked of Trello until the reader has logged in and chosen a
@@ -92,12 +109,10 @@ export async function activate(api: ExtensionApi): Promise<() => void> {
     }
   };
   await tick();
-  const timer = setInterval(() => {
-    if (!stopped) void tick();
-  }, world.config.refreshSeconds * 1000);
+  arm();
   return () => {
     stopped = true;
-    clearInterval(timer);
+    if (timer !== null) clearInterval(timer);
     world = null;
   };
 }
