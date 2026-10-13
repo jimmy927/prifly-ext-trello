@@ -151,3 +151,9 @@ type-checks on its own. This one uses all of it:
 
 Extensions run inside prifly's host with its rights, which is why prifly starts
 none until you enable one.
+
+## License and contributing
+
+Source-available under the Functional Source License 1.1 with an Apache 2.0 future license (`LICENSE.md`): use it, change it and fix it freely, but not to offer a competing product. Each version becomes Apache 2.0 two years after its release.
+
+Pull requests are welcome. Before one can be merged, its author signs the contributor agreement (`CLA.md`), which assigns the copyright in the contribution to The Startup Factory AB; the CLA bot asks for it on the pull request.
