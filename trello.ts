@@ -26,6 +26,8 @@ export type TrelloCard = {
   idList: string;
   due: string | null;
   dueComplete: boolean;
+  /** When anything last happened on the card, as an ISO date. */
+  dateLastActivity: string;
   /** A label may have a name and no colour, or a colour and no name. */
   labels: { name: string; color: string | null }[];
   members: { fullName: string; username: string }[];
@@ -83,7 +85,7 @@ export function cards(board: string, creds: Creds): Promise<TrelloCard[]> {
     filter: "open",
     members: "true",
     member_fields: "fullName,username",
-    fields: "id,shortLink,name,desc,url,idList,due,dueComplete,labels,badges",
+    fields: "id,shortLink,name,desc,url,idList,due,dueComplete,dateLastActivity,labels,badges",
   });
 }
 

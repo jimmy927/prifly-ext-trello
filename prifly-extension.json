@@ -37,6 +37,13 @@
       "min": 15
     },
     {
+      "id": "activeColumns",
+      "label": "Columns that count as active for the card list",
+      "description": "Comma-separated words, e.g. progress, this week. Any column whose name contains one (any case) is listed by the trello_cards tool, which other extensions read.",
+      "type": "string",
+      "default": "progress, denna vecka, this week"
+    },
+    {
       "id": "summaryOnArchive",
       "label": "Post a summary on the card when a session is archived",
       "description": "Ticked at first in the archive dialog: the session gets one more turn to write what it did, for the people on the board, and posts it on the card with pictures of the change. Untick it there to skip it once.",

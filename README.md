@@ -101,6 +101,16 @@ In it you can
   (`summaryOnArchive`, on), and the column picked first (`archiveColumn`,
   e.g. Done; empty leaves the card where it is). Needs a prifly with
   "archive-follow-ups"; an older one still offers the moves and the menu item.
+- **The active cards, to read** — the `trello_cards` tool lists the board's
+  active cards as JSON (`id`, `name`, `column`, `labels`, `url`,
+  `lastActivity`, `sessionId`), at most 30: those in an active column, plus
+  every card a live session carries, wherever it sits (those first). It only
+  reads — it never moves a card or asks the reader anything — so another
+  extension can call it through prifly's `api.tools.read`. An optional
+  `columns` (array of words) replaces which columns are active; by default
+  the `activeColumns` setting does: any column whose name contains
+  "progress", "denna vecka" or "this week", in any case. Not logged in, it
+  answers in plain text.
 - **A Claude Code skill** — `skills/trello`: search cards, read one whole,
   download its attachments. In prifly it uses the same login: sessions run it
   through `vault_run` with the entry `trello`, which sets `TRELLO_TOKEN`. The

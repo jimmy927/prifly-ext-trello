@@ -26,6 +26,8 @@ export type Config = {
    */
   inProgress: string;
   refreshSeconds: number;
+  /** Words that make a list active for `trello_cards`: any list whose name contains one. */
+  active: string[];
 };
 
 export type State = {
@@ -135,6 +137,9 @@ export function columnList(text: string): string[] {
     .filter((name) => name !== "");
 }
 
+/** The default of the `activeColumns` setting, as the manifest has it. */
+export const ACTIVE_COLUMNS = "progress, denna vecka, this week";
+
 /**
  * The config from the manifest's settings. `cwd` is taken as typed, never
  * normalised: on Windows it is `C:\Users\…`.
@@ -150,6 +155,7 @@ export function configFromSettings(values: SettingValues): Config {
     done: columnList(text("done", "Done")),
     inProgress: text("inProgress", "In Progress"),
     refreshSeconds: Math.max(15, typeof seconds === "number" ? seconds : 60),
+    active: columnList(text("activeColumns", ACTIVE_COLUMNS)),
   };
 }
 

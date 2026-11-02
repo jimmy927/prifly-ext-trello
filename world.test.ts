@@ -76,6 +76,7 @@ describe("configFromSettings", () => {
         done: "Done, Shipped ,",
         inProgress: "Doing now",
         refreshSeconds: 30,
+        activeColumns: "Doing, Soon",
       }),
     ).toEqual({
       // A Windows path is kept as typed.
@@ -83,6 +84,7 @@ describe("configFromSettings", () => {
       done: ["Done", "Shipped"],
       inProgress: "Doing now",
       refreshSeconds: 30,
+      active: ["Doing", "Soon"],
     });
   });
 
@@ -92,6 +94,7 @@ describe("configFromSettings", () => {
       done: ["Done"],
       inProgress: "In Progress",
       refreshSeconds: 60,
+      active: ["progress", "denna vecka", "this week"],
     });
   });
 
