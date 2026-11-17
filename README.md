@@ -8,6 +8,10 @@ picture saved to disk and pointed at. The card then rides along on that
 session's banner: click it to open it in Trello, or use its menu to move it to
 another column when the work moves.
 
+![The "From a Trello card…" board in prifly, with an example board in four columns](docs/screenshot.png)
+
+*The board as prifly shows it, drawn with invented cards. A card that already has a session is tinted.*
+
 ## Install
 
 Needs a prifly with extension **settings**, **state** and the **vault**. When
