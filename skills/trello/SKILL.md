@@ -7,9 +7,9 @@ description: Search and read Trello cards, list boards, and download card attach
 
 Wraps `trello.py`, which sits next to this SKILL.md — run it as `python3 <this skill's folder>/trello.py`. A small Python CLI (stdlib only) that talks to the Trello REST API.
 
-The app key is prifly's own and is in the script. The token comes only from the `TRELLO_TOKEN` environment variable. In prifly the reader logged in to Trello from prifly ("From a Trello card…"), which put the token in prifly's vault as the entry `trello`: run the script through the `vault_run` tool with `entry: "trello"` and `argv: ["python3", "<this skill's folder>/trello.py", ...]`. It sets `TRELLO_TOKEN` for that one command, and the token never comes back. Outside prifly (a terminal plugin install), the reader sets `TRELLO_TOKEN` themselves. If the script says `TRELLO_TOKEN` is not set, say so — do not go looking for tokens elsewhere.
+This skill is for a terminal outside prifly (a plugin install). The app key is prifly's own and is in the script. The token comes only from the `TRELLO_TOKEN` environment variable, which the reader sets themselves. If the script says `TRELLO_TOKEN` is not set, say so — do not go looking for tokens elsewhere.
 
-In prifly, a session started from a card already has that card's whole contents in its first prompt and its attachments on disk: use this skill for the cards it was *not* started from, and to search.
+**Inside prifly this skill is not used.** There the `trello_search`, `trello_card`, `trello_boards` and `trello_attachments` tools do the same with the reader's own login, and no token is ever handed to the session. The rules and flow below apply to those tools the same way (`trello_card` ↔ `card`, `trello_attachments` ↔ `attachments`).
 
 ### ⛔ ABSOLUTE RULE — READ EVERYTHING ⛔
 

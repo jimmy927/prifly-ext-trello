@@ -179,7 +179,7 @@ describe("the skill", () => {
     expect(found?.[1]).toBe(PRIFLY_APP_KEY);
   });
 
-  test("the token is TRELLO_TOKEN, as vault_run sets it, and the key is its own", async () => {
+  test("the token is TRELLO_TOKEN and the key is prifly's own", async () => {
     expect(await credsIn({ TRELLO_TOKEN: "from-vault" })).toBe(
       `key=${PRIFLY_APP_KEY} token=from-vault`,
     );
@@ -191,10 +191,11 @@ describe("the skill", () => {
     );
   });
 
-  test("no TRELLO_TOKEN says to use vault_run, or to set it", async () => {
+  test("no TRELLO_TOKEN says to set it, or to use the tools inside prifly", async () => {
     const said = await credsIn({});
     expect(said).toContain("TRELLO_TOKEN is not set");
-    expect(said).toContain("vault_run");
+    expect(said).toContain("trello_* tools");
+    expect(said).not.toContain("vault");
   });
 
   test("no login file is looked for", async () => {

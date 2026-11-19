@@ -20,6 +20,7 @@ import { cardsTool } from "./cards-tool";
 import { cardFace, cardItem, shortDate } from "./card-face";
 import { cardPrompt } from "./card-prompt";
 import { LINK_ACTION, withLink } from "./link-actions";
+import { readTools } from "./read-tools";
 import type {
   ActionPicked,
   Decoration,
@@ -84,6 +85,7 @@ export async function activate(api: ExtensionApi): Promise<() => void> {
   api.tools?.register([
     summaryTool(() => (world === null ? null : creds(world))),
     cardsTool(() => world),
+    ...readTools(() => world),
   ]);
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;

@@ -241,6 +241,12 @@ export type ExtensionToolContext = {
   session: string;
   /** Aborted when the session or the call goes away. */
   signal: AbortSignal;
+  /**
+   * The calling session's scratchpad folder, made if it is missing. Reading it
+   * throws when prifly has no transcript to find the folder from. Where
+   * `api.features` includes "tool-scratchpad"; absent on an older prifly.
+   */
+  readonly scratchpad?: string;
 };
 
 /** An MCP tool served to every session as `mcp__prifly__<name>`. */
