@@ -274,6 +274,17 @@ export type ExtensionVaultApi = {
   forget?(name: string): Promise<boolean>;
 };
 
+/**
+ * `api.secrets` (prifly's `secrets.ts`): a small sealed store for what only
+ * this extension may read. Where `api.features` includes "secrets".
+ */
+export type ExtensionSecretsApi = {
+  get(key: string): Promise<string | null>;
+  /** Stores `value` under `key`; null deletes the key. */
+  set(key: string, value: string | null): Promise<void>;
+  keys(prefix?: string): Promise<string[]>;
+};
+
 /** `api.state` (prifly's `state.ts`): documents and logs kept in prifly's database. */
 export type ExtensionStateApi = {
   get<T = unknown>(name: string): Promise<NoInfer<T> | undefined>;
@@ -306,6 +317,8 @@ export type ExtensionApi = {
   state?: ExtensionStateApi;
   /** The vault entries this extension's manifest names. Absent on a prifly without a vault. */
   vault?: ExtensionVaultApi;
+  /** The extension's own secrets. Where `api.features` includes "secrets". */
+  secrets?: ExtensionSecretsApi;
   /**
    * The values of the manifest's `settings`, defaults filled in, current at
    * each read. Where `api.features` includes "settings".

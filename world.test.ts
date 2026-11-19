@@ -26,6 +26,8 @@ const state = (links: Record<string, string[]>): State => ({
   links,
   ignored: [],
   member: "",
+  migrated: false,
+  vaultNoted: false,
 });
 
 describe("cardLists", () => {
@@ -114,7 +116,7 @@ describe("the app key", () => {
   });
 });
 
-describe("a prifly missing settings, state or the vault", () => {
+describe("a prifly missing settings, state or secrets", () => {
   let folder = "";
   const realFetch = globalThis.fetch;
   let asked: string[] = [];
@@ -133,8 +135,12 @@ describe("a prifly missing settings, state or the vault", () => {
 
   test("supported needs all three, as feature and as api", () => {
     expect(supported(fakePrifly(folder).api)).toBe(true);
-    for (const missing of ["settings", "state", "vault-file"] as Needed[])
+    for (const missing of ["settings", "state", "secrets"] as Needed[])
       expect(supported(fakePrifly(folder, { without: [missing] }).api)).toBe(false);
+    // The vault is optional: it is only for moving an old login.
+    const noVault = fakePrifly(folder).api as { vault?: unknown };
+    delete noVault.vault;
+    expect(supported(noVault as ExtensionApi)).toBe(true);
     // The feature name alone, without the api behind it, is not enough.
     const noApi = fakePrifly(folder).api as { state?: unknown };
     delete noApi.state;
@@ -142,11 +148,12 @@ describe("a prifly missing settings, state or the vault", () => {
     expect(supported({ features: [] } as unknown as ExtensionApi)).toBe(false);
   });
 
-  for (const missing of ["settings", "state", "vault-file"] as Needed[]) {
+  for (const missing of ["settings", "state", "secrets"] as Needed[]) {
     test(`without ${missing}: only the Update row shows, nothing runs and no file is written`, async () => {
       const fake = fakePrifly(folder, { without: [missing] });
-      // A login in the vault and a board in the state must not wake anything up.
+      // A login in the vault or the secrets and a board in the state must not wake anything up.
       fake.entries.set("trello", "t".repeat(40));
+      fake.secrets.set("token", "t".repeat(40));
       let shown = 0;
       let wired = 0;
       Object.assign(fake.api, {
@@ -190,6 +197,14 @@ describe("a prifly missing settings, state or the vault", () => {
     const rows = await setupChoices(world);
     expect(rows).toHaveLength(1);
     expect(rows?.[0]?.title).toBe("Update prifly to use this extension");
+  });
+
+  test("without secrets the Update row says secrets, not the vault", async () => {
+    const world = await load(fakePrifly(folder, { without: ["secrets"] }).api);
+    const rows = await setupChoices(world);
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]?.detail).toContain("secrets");
+    expect(rows?.[0]?.detail).not.toContain("vault");
   });
 
   test("a supported prifly starts at the login rows", async () => {

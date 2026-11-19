@@ -8,9 +8,9 @@
  * and approve prifly by name. prifly never sees a password, and the token is
  * theirs: it reaches their boards and nobody else's.
  *
- * The token is kept in prifly's vault, as the entry `trello`, so it moves with
- * prifly's data; the reader confirms the filing on a card. It can be revoked at
- * any time from Trello's own account settings or by logging out here.
+ * The token is kept in the extension's own `api.secrets` (sealed on disk, so it
+ * moves with prifly's data). It can be revoked at any time from Trello's own
+ * account settings or by logging out here.
  */
 
 import type { ExtensionApi } from "./prifly-api";
@@ -27,7 +27,14 @@ export type Auth = { key: string; token: string };
 
 export type Session = { token: string; member: string };
 
-/** The vault entry the token is kept in; the manifest's `vault` list names it. */
+/** The key the token is kept under in `api.secrets`. */
+export const TOKEN_KEY = "token";
+
+/**
+ * The vault entry earlier versions filed the token in. The manifest's `vault`
+ * list still names it (JSON has no comments, so it is said here and in the
+ * README): for moving that token into `api.secrets` once, and nothing else.
+ */
 export const VAULT_ENTRY = "trello";
 
 /**
@@ -67,38 +74,48 @@ export async function whoami(auth: Auth): Promise<string> {
   return ((await response.json()) as { username?: string }).username ?? "you";
 }
 
-/** The login: the vault's token, with the name kept in prifly's state (`world.ts`). Null for no entry. */
+/** The login: the token in `api.secrets`, with the name kept in prifly's state (`world.ts`). Null for no token. */
 export async function readSession(api: ExtensionApi, member: string): Promise<Session | null> {
-  const filed = await api.vault?.read(VAULT_ENTRY).catch(() => null);
-  return typeof filed === "string" && filed !== ""
-    ? { token: filed, member: member || "you" }
-    : null;
+  const kept = await api.secrets?.get(TOKEN_KEY).catch(() => null);
+  return typeof kept === "string" && kept !== "" ? { token: kept, member: member || "you" } : null;
 }
 
-/**
- * Keeps a new login in the vault, and null once it is kept; otherwise why it
- * was not. The reader is asked on a card and the token never lands in a file.
- */
+/** Keeps a new login in `api.secrets`, and null once it is kept; otherwise why it was not. */
 export async function keepSession(api: ExtensionApi, session: Session): Promise<string | null> {
-  const filed = await api.vault?.file?.(VAULT_ENTRY, {
-    token: session.token,
-    label: `Trello, ${session.member}`,
-    host: "trello.com",
-    why: "Your Trello board in prifly, and the Trello skill",
-  });
-  if (filed?.outcome === "accepted") return null;
-  if (filed?.outcome === "refused")
-    return `prifly would not file it in the vault: ${filed.message}`;
-  if (filed?.outcome === "timed out") return "Nobody confirmed filing it in the vault.";
-  return "You declined filing it in the vault.";
+  if (api.secrets === undefined) return "This prifly keeps no extension secrets.";
+  try {
+    await api.secrets.set(TOKEN_KEY, session.token);
+    return null;
+  } catch (caught) {
+    return `prifly could not keep it: ${caught instanceof Error ? caught.message : String(caught)}`;
+  }
 }
 
 /**
- * Log out: removes the vault entry (only one this extension filed is removed).
- * True when the vault still reads a token afterwards — an entry the reader made
- * themselves, which only they can remove.
+ * Log out: removes the token from `api.secrets`, and the old vault entry if
+ * this extension filed it (`forget` removes only that). True when the vault
+ * still reads a token afterwards: an entry the reader made themselves, which
+ * only they can remove. It is no longer used, and `world.ts` never copies it
+ * once the reader has logged out.
  */
 export async function forgetSession(api: ExtensionApi): Promise<boolean> {
+  await api.secrets?.set(TOKEN_KEY, null);
   await api.vault?.forget?.(VAULT_ENTRY).catch(() => false);
   return ((await api.vault?.read(VAULT_ENTRY).catch(() => null)) ?? null) !== null;
+}
+
+/**
+ * Moves a token an earlier version filed in the vault into `api.secrets`, and
+ * forgets the entry. `moved` is false when the vault had none; `left` is true
+ * when the vault still reads a token afterwards (an entry the reader made
+ * themselves). Nothing is forgotten unless the copy succeeded.
+ */
+export async function moveFromVault(api: ExtensionApi): Promise<{ moved: boolean; left: boolean }> {
+  const old = await api.vault?.read(VAULT_ENTRY).catch(() => null);
+  if (typeof old !== "string" || old === "" || api.secrets === undefined)
+    return { moved: false, left: false };
+  await api.secrets.set(TOKEN_KEY, old);
+  await api.vault?.forget?.(VAULT_ENTRY).catch(() => false);
+  const left = ((await api.vault?.read(VAULT_ENTRY).catch(() => null)) ?? null) !== null;
+  return { moved: true, left };
 }

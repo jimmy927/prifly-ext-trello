@@ -14,7 +14,7 @@ another column when the work moves.
 
 ## Install
 
-Needs a prifly with extension **settings**, **state** and the **vault**. When
+Needs a prifly with extension **settings**, **state** and **secrets**. When
 one of the three is missing the list shows a single row, "Update prifly to use
 this extension", and nothing else runs: no refresh, no Trello calls.
 
@@ -29,8 +29,9 @@ card…** and follow the two rows it shows:
    page. Sign in however you normally do (Google, Microsoft, Atlassian); prifly
    never sees a password.
 2. **Paste the token Trello shows you** — one paste, once. It is checked
-   against Trello there and then, and filed in prifly's vault as the entry
-   `trello`: a card asks you to confirm, and the token moves with prifly's data.
+   against Trello there and then, and kept in the extension's own sealed
+   secrets (`api.secrets`): there is no card to confirm, and the token moves
+   with prifly's data.
 
 Then pick which of your boards to show. That is the whole setup. The board can
 be changed later from the same list ("Switch board…"), as can logging out.
@@ -55,9 +56,16 @@ path means nothing there.
 
 The board you chose, each session's cards and the other things the extension
 remembers live in prifly's database (`api.state`), so `prifly-move` carries them
-to another machine. The Trello skill gets the token from the vault through
-`vault_run` (entry `trello`). The downloaded `cards/` are ignored by git: nothing
-about your account or your board is ever committed.
+to another machine. The Trello skill's script reads the token from
+`TRELLO_TOKEN`. The downloaded `cards/` are ignored by git: nothing about your
+account or your board is ever committed.
+
+Earlier versions filed the token in prifly's vault as the entry `trello`. The
+manifest still lists `"vault": ["trello"]` (JSON has no comments) for that
+migration only: on start, a login found there is copied into `api.secrets` and
+the entry forgotten. If the vault still holds one afterwards (an entry you made
+yourself), you are told once that it can be removed in the Vault dialog; it is
+never copied again after you log out.
 
 Updating from a version that kept its login or board choice in files in this
 folder: those files are no longer read. Log in once more and pick your board
@@ -116,8 +124,9 @@ In it you can
   "progress", "denna vecka" or "this week", in any case. Not logged in, it
   answers in plain text.
 - **A Claude Code skill** — `skills/trello`: search cards, read one whole,
-  download its attachments. In prifly it uses the same login: sessions run it
-  through `vault_run` with the entry `trello`, which sets `TRELLO_TOKEN`. The
+  download its attachments. The script reads `TRELLO_TOKEN`; in prifly the
+  login lives in `api.secrets`, which a session cannot hand to a script, so
+  inside prifly use the `trello_*` tools instead. The
   repository is also a Claude Code plugin and its own marketplace, so terminal
   sessions can have it too; there, set `TRELLO_TOKEN` to your Trello token:
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { forgetSession, PRIFLY_APP_KEY } from "./auth";
 import { type FakeOptions, type FakePrifly, fakePrifly } from "./fake-prifly";
-import { runSetup } from "./setup";
+import { runSetup, setupTail } from "./setup";
 import { load, parseState } from "./world";
 
 const TOKEN = "t".repeat(40);
@@ -37,18 +37,16 @@ const login = async (fake: FakePrifly, token = TOKEN) => {
 };
 
 describe("logging in", () => {
-  test("the token is filed in the vault and no file is written", async () => {
+  test("the token is kept in api.secrets, no vault card is asked and no file is written", async () => {
     const fake = prifly();
     const { world, launch } = await login(fake);
     expect(launch?.message).toContain("Logged in as jimmy");
-    expect(fake.filed).toHaveLength(1);
-    expect(fake.filed[0]?.name).toBe("trello");
-    expect(fake.filed[0]?.request.token === TOKEN).toBe(true);
-    expect(fake.filed[0]?.request.host).toBe("trello.com");
-    expect(fake.entries.get("trello") === TOKEN).toBe(true);
+    expect(fake.secrets.get("token") === TOKEN).toBe(true);
+    expect(fake.filed).toEqual([]);
+    expect(fake.entries.size).toBe(0);
     expect(readdirSync(folder)).toEqual([]);
     expect(world.session?.member).toBe("jimmy");
-    // The name is not a secret and the vault holds only the token: it is kept in prifly's state.
+    // The name is not a secret and the secrets hold only the token: it is kept in prifly's state.
     expect((await readState(fake)).member).toBe("jimmy");
   });
 
@@ -62,64 +60,131 @@ describe("logging in", () => {
     expect(asked[0]).toContain(`key=${PRIFLY_APP_KEY}`);
   });
 
-  test("a reader who declines the card is not logged in, and nothing is kept", async () => {
-    const fake = prifly({ answer: "declined" });
+  test("a store that fails says why, without the token, and nobody is logged in", async () => {
+    const fake = prifly();
     const world = await load(fake.api);
-    await expect(runSetup(world, "setup:paste-token", TOKEN)).rejects.toThrow("declined");
-    expect(world.session).toBeNull();
-    expect(readdirSync(folder)).toEqual([]);
-    expect(fake.entries.size).toBe(0);
-  });
-
-  test("a refusal says why, without the token", async () => {
-    const fake = prifly({ answer: "refused" });
-    const world = await load(fake.api);
+    Object.assign(fake.api.secrets ?? {}, {
+      set: async () => {
+        throw new Error("disk full");
+      },
+    });
     const failure = await runSetup(world, "setup:paste-token", TOKEN).catch(
       (caught: Error) => caught,
     );
-    expect((failure as Error).message).toContain("not listed");
+    expect((failure as Error).message).toContain("disk full");
     expect((failure as Error).message.includes(TOKEN)).toBe(false);
+    expect(world.session).toBeNull();
   });
 });
 
 describe("reading the login", () => {
-  test("from the vault, with the name kept in prifly's state", async () => {
+  test("from api.secrets, with the name kept in prifly's state", async () => {
     const fake = prifly();
-    fake.entries.set("trello", TOKEN);
+    fake.secrets.set("token", TOKEN);
     await fake.database.set("state", { member: "jimmy" });
     const world = await load(fake.api);
     expect(world.session?.token === TOKEN).toBe(true);
     expect(world.session?.member).toBe("jimmy");
   });
 
-  test("a login survives a restart: token in the vault, board in the state", async () => {
+  test("a login survives a restart: token in the secrets, board in the state", async () => {
     const fake = prifly();
     const { world } = await login(fake);
     await runSetup(world, "setup:board:b1|Work", "");
-    // A restart: a new api over the same database, and the vault still holds the entry.
+    // A restart: a new api over the same database, and the secrets still hold the token.
     const again = prifly({ database: fake.database });
-    again.entries.set("trello", fake.entries.get("trello") ?? "");
+    again.secrets.set("token", fake.secrets.get("token") ?? "");
     const back = await load(again.api);
     expect(back.session?.token === TOKEN).toBe(true);
     expect(back.state.board).toBe("b1");
     expect(back.state.boardName).toBe("Work");
+    expect(again.filed).toEqual([]);
   });
 
-  test("nothing in the vault is logged out", async () => {
+  test("nothing in the secrets is logged out", async () => {
     expect((await load(prifly().api)).session).toBeNull();
   });
 });
 
-describe("logging out", () => {
-  test("forgets the vault entry and clears the name", async () => {
+describe("moving an old vault login", () => {
+  test("is copied into the secrets and the entry forgotten", async () => {
+    const fake = prifly();
+    fake.entries.set("trello", TOKEN);
+    await fake.database.set("state", { member: "jimmy", board: "b1" });
+    const world = await load(fake.api);
+    expect(world.session?.token === TOKEN).toBe(true);
+    expect(world.session?.member).toBe("jimmy");
+    expect(fake.secrets.get("token") === TOKEN).toBe(true);
+    expect(fake.forgotten).toEqual(["trello"]);
+    expect(fake.entries.has("trello")).toBe(false);
+    expect(world.vaultNote).toBe(false);
+    // And it is still logged in after the next start, with no vault entry left.
+    const again = prifly({ database: fake.database });
+    again.secrets.set("token", fake.secrets.get("token") ?? "");
+    expect((await load(again.api)).session?.token === TOKEN).toBe(true);
+  });
+
+  test("a reader-made entry (forget leaves it) keeps working and is mentioned once", async () => {
+    const fake = prifly({ ownEntry: false });
+    fake.entries.set("trello", TOKEN);
+    const world = await load(fake.api);
+    expect(world.session?.token === TOKEN).toBe(true);
+    expect(fake.secrets.get("token") === TOKEN).toBe(true);
+    expect(world.vaultNote).toBe(true);
+    const rows = setupTail(world);
+    expect(rows?.find((row) => row.title === "Log out of Trello")?.detail).toContain(
+      "Vault dialog",
+    );
+    // The next start does not say it again.
+    const again = prifly({ database: fake.database, ownEntry: false });
+    again.secrets.set("token", TOKEN);
+    again.entries.set("trello", TOKEN);
+    const back = await load(again.api);
+    expect(back.session?.token === TOKEN).toBe(true);
+    expect(back.vaultNote).toBe(false);
+  });
+
+  test("Log out with a reader-made entry stays logged out after a restart", async () => {
+    const fake = prifly({ ownEntry: false });
+    fake.entries.set("trello", TOKEN);
+    const world = await load(fake.api);
+    const launch = await runSetup(world, "setup:log-out", "");
+    expect(launch?.message).toContain("Vault dialog");
+    expect(fake.secrets.has("token")).toBe(false);
+    expect(world.session).toBeNull();
+    const again = prifly({ database: fake.database, ownEntry: false });
+    again.entries.set("trello", TOKEN);
+    const back = await load(again.api);
+    expect(back.session).toBeNull();
+    expect(again.secrets.has("token")).toBe(false);
+  });
+
+  test("nothing is moved after the reader has logged out of a vault-less start", async () => {
     const fake = prifly();
     const { world } = await login(fake);
+    await runSetup(world, "setup:log-out", "");
+    // An entry that shows up later is not the reader's login any more.
+    const again = prifly({ database: fake.database });
+    again.entries.set("trello", OTHER);
+    expect((await load(again.api)).session).toBeNull();
+    expect(again.forgotten).toEqual([]);
+  });
+});
+
+describe("logging out", () => {
+  test("clears the secrets, forgets an old vault entry and clears the name", async () => {
+    const fake = prifly();
+    const { world } = await login(fake);
+    // An entry an earlier version filed and a later start did not migrate.
+    fake.entries.set("trello", TOKEN);
     const launch = await runSetup(world, "setup:log-out", "");
+    expect(fake.secrets.has("token")).toBe(false);
     expect(fake.forgotten).toEqual(["trello"]);
     expect(fake.entries.has("trello")).toBe(false);
     expect(world.session).toBeNull();
     expect((await readState(fake)).member).toBe("");
     expect(launch?.message).toContain("Logged out");
+    expect(launch?.message).not.toContain("Vault dialog");
     expect((await load(fake.api)).session).toBeNull();
   });
 

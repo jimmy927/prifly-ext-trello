@@ -61,20 +61,27 @@ export function setupTail(world: World): LaunchChoice[] {
       key: KEYS.logout,
       title: "Log out of Trello",
       group: "prifly",
-      detail: world.session === null ? "" : `Signed in as ${world.session.member}`,
+      detail:
+        world.session === null
+          ? ""
+          : `Signed in as ${world.session.member}${world.vaultNote ? VAULT_NOTE : ""}`,
       tone: "muted",
     },
   ];
 }
 
-/** This extension needs a prifly with settings, state and a vault: until then nothing runs. */
+/** Said once, when the reader's own vault entry `trello` is left after the login moved. */
+const VAULT_NOTE =
+  ". The vault entry “trello” is yours and no longer used: remove it in the Vault dialog.";
+
+/** This extension needs a prifly with settings, state and secrets: until then nothing runs. */
 function updateRow(): LaunchChoice {
   return {
     key: KEYS.update,
     title: "Update prifly to use this extension",
     group: "Setup",
     detail:
-      "This extension needs a prifly with extension settings, state and the vault. Update prifly, then open this list again.",
+      "This extension needs a prifly with extension settings, state and secrets. Update prifly, then open this list again.",
     tone: "warning",
   };
 }
@@ -92,7 +99,7 @@ function loginRows(): LaunchChoice[] {
       key: KEYS.token,
       title: "2. Paste the token Trello shows you",
       group: "Log in",
-      detail: "Trello ends the approval with a token to copy. It is kept in prifly's vault.",
+      detail: "Trello ends the approval with a token to copy. It is kept in this extension's own sealed secrets.",
       tone: "info",
       input: {
         title: "The token from Trello",
@@ -160,9 +167,10 @@ async function saveToken(world: World, input: string): Promise<Launch> {
   if (refusal !== null)
     throw new Error(`${refusal} Nothing was kept: pick “2. Paste the token” again to retry.`);
   world.session = session;
-  // The vault holds only the token; the name is kept in prifly's state.
+  // The secrets hold only the token; the name is kept in prifly's state.
   await changeState(world, (state) => {
     state.member = member;
+    state.migrated = true;
   });
   world.api.log("logged_in", { member });
   return { prompt: "", message: `Logged in as ${member}. Now choose a board.` };
@@ -193,14 +201,16 @@ async function logOut(world: World): Promise<Launch> {
     state.board = "";
     state.boardName = "";
     state.member = "";
+    state.migrated = true;
   });
+  world.vaultNote = false;
   world.cards = [];
   world.lists = [];
   world.api.log("logged_out", { ready: ready(world) });
   return {
     prompt: "",
     message: kept
-      ? "Logged out, but the vault entry “trello” is yours, not this extension's: remove it in the Vault dialog, or the next start logs you in again."
+      ? "Logged out. The saved token is gone; the vault entry “trello” is yours and no longer used: remove it in the Vault dialog."
       : "Logged out. The saved token is gone.",
   };
 }

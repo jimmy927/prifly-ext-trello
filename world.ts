@@ -4,13 +4,13 @@
  * The plain configuration (where a card's session works, …) is prifly's
  * extension settings. What the extension remembers — which board they chose,
  * which session is on which card — is prifly's database (`api.state`), and the
- * login token is prifly's vault (`auth.ts`), so all of it moves with prifly's
+ * login token is `api.secrets` (`auth.ts`), so all of it moves with prifly's
  * data. Nothing is kept in a file here, nothing is shared, and nothing is
  * anybody's but the reader's.
  */
 
 import type { Session } from "./auth";
-import { PRIFLY_APP_KEY, readSession } from "./auth";
+import { moveFromVault, PRIFLY_APP_KEY, readSession } from "./auth";
 import type { ExtensionApi, SettingValues } from "./prifly-api";
 import type { TrelloCard, TrelloList } from "./trello";
 import { board as boardOf, type Creds, cards as cardsOf, lists as listsOf } from "./trello";
@@ -41,8 +41,15 @@ export type State = {
    * software work at all. Left off the board, and listed on their own.
    */
   ignored: string[];
-  /** The Trello username of the login kept in the vault, which holds only the token. */
+  /** The Trello username of the login; `api.secrets` holds only the token. */
   member: string;
+  /**
+   * The old vault entry has been looked at (moved, or the reader logged in or
+   * out since): it is never copied again, so Log out stays logged out.
+   */
+  migrated: boolean;
+  /** The note about a vault entry of the reader's own has been shown. */
+  vaultNoted: boolean;
 };
 
 export type World = {
@@ -54,6 +61,8 @@ export type World = {
   cards: TrelloCard[];
   /** The board shows the ignored cards instead of the rest, until switched back. */
   showIgnored: boolean;
+  /** Set for this run when the reader's own vault entry `trello` is left and not yet mentioned. */
+  vaultNote: boolean;
 };
 
 /** The two halves of a Trello call, when both are in hand. */
@@ -69,9 +78,9 @@ export function ready(world: World): boolean {
 
 /**
  * Whether this prifly can run the extension: it keeps the settings
- * (`api.settings`), the state (`api.state`) and files a login token in the
- * vault (`api.vault.file` and `forget`, the "vault-file" feature). Otherwise
- * nothing runs but the row that says to update prifly (`setup.ts`).
+ * (`api.settings`), the state (`api.state`) and keeps the login token in
+ * `api.secrets` (the "secrets" feature). The vault is optional, for moving an
+ * old login only. Otherwise nothing runs but the row that says to update prifly (`setup.ts`).
  */
 export function supported(api: ExtensionApi): boolean {
   const features = api.features ?? [];
@@ -80,9 +89,8 @@ export function supported(api: ExtensionApi): boolean {
     api.settings !== undefined &&
     features.includes("state") &&
     api.state !== undefined &&
-    features.includes("vault-file") &&
-    api.vault?.file !== undefined &&
-    api.vault.forget !== undefined
+    features.includes("secrets") &&
+    api.secrets !== undefined
   );
 }
 
@@ -93,7 +101,7 @@ export function supported(api: ExtensionApi): boolean {
 export async function load(api: ExtensionApi): Promise<World> {
   const stored = supported(api) ? await api.state?.get<unknown>(STATE_DOC) : undefined;
   const state = parseState(stored);
-  return {
+  const world: World = {
     api,
     config: configFromSettings(api.settings ?? {}),
     session: supported(api) ? await readSession(api, state.member) : null,
@@ -101,7 +109,30 @@ export async function load(api: ExtensionApi): Promise<World> {
     lists: [],
     cards: [],
     showIgnored: false,
+    vaultNote: false,
   };
+  if (supported(api)) await migrate(world);
+  return world;
+}
+
+/**
+ * A login an earlier version filed in the vault moves into `api.secrets` once,
+ * and the entry is forgotten. An entry the reader made themselves survives
+ * `forget`: it is mentioned once, and never copied again after a Log out.
+ */
+async function migrate(world: World): Promise<void> {
+  if (world.state.migrated || world.session !== null) return;
+  const { moved, left } = await moveFromVault(world.api);
+  // A vault with no entry leaves nothing to remember: logging in or out marks it done.
+  if (!moved) return;
+  world.session = await readSession(world.api, world.state.member);
+  world.api.log("login_moved_from_vault", { left });
+  const note = left && !world.state.vaultNoted;
+  await changeState(world, (state) => {
+    state.migrated = true;
+    if (note) state.vaultNoted = true;
+  });
+  world.vaultNote = note;
 }
 
 /** What the board has now. Leaves what was last seen alone when it cannot ask. */
@@ -173,6 +204,8 @@ export function parseState(value: unknown): State {
       ? raw.ignored.filter((id): id is string => typeof id === "string")
       : [],
     member: typeof raw.member === "string" ? raw.member : "",
+    migrated: raw.migrated === true,
+    vaultNoted: raw.vaultNoted === true,
   };
 }
 

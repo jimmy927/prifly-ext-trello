@@ -74,7 +74,7 @@ let world: World | null = null;
 
 export async function activate(api: ExtensionApi): Promise<() => void> {
   world = await load(api);
-  // Settings, state or the vault missing: the chooser says to update prifly
+  // Settings, state or secrets missing: the chooser says to update prifly
   // (`setupChoices`), and nothing else runs — no timer, no Trello calls.
   if (!supported(api)) {
     return () => {

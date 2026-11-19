@@ -8,5 +8,5 @@ imports only its own files and Node built-ins (`node:path`, `node:fs`). The skil
 lockfile and no pyproject.
 
 What it relies on outside the worktree: `bun` on PATH to run or test the TypeScript, and
-`python3` for the skill's script. A logged-in Trello account (the vault entry `trello`) and the board choice (`api.state`) live in
+`python3` for the skill's script. A logged-in Trello account (`api.secrets`) and the board choice (`api.state`) live in
 prifly, and are never needed to work in a worktree.
