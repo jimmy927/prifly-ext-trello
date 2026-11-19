@@ -56,9 +56,9 @@ path means nothing there.
 
 The board you chose, each session's cards and the other things the extension
 remembers live in prifly's database (`api.state`), so `prifly-move` carries them
-to another machine. The Trello skill's script reads the token from
-`TRELLO_TOKEN`. The downloaded `cards/` are ignored by git: nothing about your
-account or your board is ever committed.
+to another machine. Sessions never get the token: they read Trello through the
+extension's `trello_*` tools, which use the login inside the extension (kept in `api.secrets`). The downloaded `cards/` are ignored by git: nothing
+about your account or your board is ever committed.
 
 Earlier versions filed the token in prifly's vault as the entry `trello`. The
 manifest still lists `"vault": ["trello"]` (JSON has no comments) for that
@@ -123,10 +123,18 @@ In it you can
   the `activeColumns` setting does: any column whose name contains
   "progress", "denna vecka" or "this week", in any case. Not logged in, it
   answers in plain text.
-- **A Claude Code skill** — `skills/trello`: search cards, read one whole,
-  download its attachments. The script reads `TRELLO_TOKEN`; in prifly the
-  login lives in `api.secrets`, which a session cannot hand to a script, so
-  inside prifly use the `trello_*` tools instead. The
+- **Read tools for every session**, all read-only and using the extension's own
+  login, so no token reaches the session: `trello_search` (full-text search,
+  open boards first, `limit`), `trello_card` (one card whole: column, labels,
+  members, description, comments oldest first, checklists, attachment list;
+  takes a link, short id or long id), `trello_boards` (open boards, `all` for
+  archived too) and `trello_attachments` (downloads a card's Trello-hosted
+  attachments to a folder, the session's scratchpad by default, and answers
+  with the file paths; links to other sites are listed, not fetched). Not
+  logged in, each answers in one plain line.
+- **A Claude Code skill** — `skills/trello`, for a terminal outside prifly:
+  search cards, read one whole, download its attachments with `trello.py`.
+  Inside prifly the tools above are used instead. The
   repository is also a Claude Code plugin and its own marketplace, so terminal
   sessions can have it too; there, set `TRELLO_TOKEN` to your Trello token:
 

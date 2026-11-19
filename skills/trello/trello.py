@@ -3,9 +3,8 @@
 Trello CLI: search/read cards and download attachments.
 
 The app key is prifly's own (KEY below, no secret). The token comes only from
-the TRELLO_TOKEN environment variable. Inside prifly run this script through the
-vault_run tool with entry "trello": the vault entry the extension's login filed
-is handed over as TRELLO_TOKEN. Outside prifly set TRELLO_TOKEN yourself.
+the TRELLO_TOKEN environment variable, which you set yourself. This script is for
+a terminal outside prifly; inside prifly use the trello_* tools instead.
 """
 
 from __future__ import annotations
@@ -32,9 +31,8 @@ def load_creds() -> tuple[str, str]:
     token = os.environ.get("TRELLO_TOKEN")
     if not token:
         sys.exit(
-            "TRELLO_TOKEN is not set. Inside prifly, run this script through the "
-            'vault_run tool with entry "trello" (log in first from "From a Trello '
-            'card..."). Outside prifly, set TRELLO_TOKEN to your Trello token.'
+            "TRELLO_TOKEN is not set. Set it to your Trello token. (Inside prifly "
+            "use the trello_* tools instead of this script.)"
         )
     return KEY, token
 

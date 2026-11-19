@@ -266,3 +266,36 @@ export function safeName(name: string): string {
   const cleaned = name.replaceAll(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+/, "");
   return cleaned === "" ? "attachment" : cleaned.slice(0, 80);
 }
+
+/** What a card id is, whatever form it came in: a trello.com/c/ link, a short id or a long one. */
+export function normalizeCardId(text: string): string {
+  const found = /trello\.com\/c\/([A-Za-z0-9]+)/.exec(text);
+  return (found?.[1] ?? text).trim();
+}
+
+export type SearchHit = { name: string; url: string; closed: boolean };
+
+/** Trello's own full-text search over cards; it ranks open boards first. */
+export async function searchCards(query: string, limit: number, creds: Creds): Promise<SearchHit[]> {
+  const found = await get<{ cards?: SearchHit[] }>("/search", creds, {
+    query,
+    modelTypes: "cards",
+    card_fields: "name,url,desc,idBoard,closed",
+    cards_limit: String(limit),
+    partial: "true",
+  });
+  return (found.cards ?? []).map((hit) => ({ name: hit.name, url: hit.url, closed: hit.closed === true }));
+}
+
+export type BoardEntry = { id: string; name: string; url: string; closed: boolean };
+
+/** Every board the token can see, archived ones too; the caller filters. */
+export async function boardsOf(creds: Creds): Promise<BoardEntry[]> {
+  const boards = await get<BoardEntry[]>("/members/me/boards", creds, { fields: "name,url,closed" });
+  return boards.map((entry) => ({ ...entry, closed: entry.closed === true }));
+}
+
+/** A list's name, for a card to say which column it is in. */
+export async function listName(id: string, creds: Creds): Promise<string> {
+  return (await get<{ name: string }>(`/lists/${id}`, creds, { fields: "name" })).name;
+}
