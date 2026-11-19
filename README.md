@@ -132,6 +132,13 @@ In it you can
   attachments to a folder, the session's scratchpad by default, and answers
   with the file paths; links to other sites are listed, not fetched). Not
   logged in, each answers in one plain line.
+- **Create a card** — `trello_create_card` (`board` as id, name or link, default
+  the chosen board; `column` by name, any case; `title`; optional `description`
+  in Markdown; `position` "bottom" or "top") makes a card as the reader. The
+  reader sees a confirm card with board, column, title and description first;
+  cancelled, nothing is created ("Not done: you cancelled"). An unknown board
+  or column is refused with the valid ones. It answers with the card's URL
+  and id.
 - **A Claude Code skill** — `skills/trello`, for a terminal outside prifly:
   search cards, read one whole, download its attachments with `trello.py`.
   Inside prifly the tools above are used instead. The

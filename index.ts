@@ -17,6 +17,7 @@
 
 import { join } from "node:path";
 import { cardsTool } from "./cards-tool";
+import { createCardTool } from "./create-card-tool";
 import { cardFace, cardItem, shortDate } from "./card-face";
 import { cardPrompt } from "./card-prompt";
 import { LINK_ACTION, withLink } from "./link-actions";
@@ -85,6 +86,7 @@ export async function activate(api: ExtensionApi): Promise<() => void> {
   api.tools?.register([
     summaryTool(() => (world === null ? null : creds(world))),
     cardsTool(() => world),
+    createCardTool(() => world),
     ...readTools(() => world),
   ]);
   let stopped = false;

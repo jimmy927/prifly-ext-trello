@@ -260,6 +260,18 @@ export type ExtensionTool = {
   call(args: Record<string, unknown>, ctx: ExtensionToolContext): Promise<string>;
 };
 
+/** What `api.confirm` shows: a card over the calling session, Confirm or Cancel. */
+export type ConfirmSpec = {
+  /** What the write is, in a few words: "Create a Trello card". */
+  title: string;
+  /** What will happen, in a line or two, shown large. */
+  summary: string;
+  /** The human part (a description), plain text under the summary; "" or left out draws no box. */
+  content?: string;
+  /** The technical part, folded under a "Details" toggle. */
+  details: string;
+};
+
 /** What the extension asks the vault to keep: a login token, confirmed by the reader. */
 export type VaultFileRequest = { token: string; label?: string; host?: string; why: string };
 
@@ -332,6 +344,11 @@ export type ExtensionApi = {
   settings?: SettingValues;
   /** Called after the reader changes a setting, with every value. Where `api.features` includes "settings". */
   onSettings?: (handler: (values: SettingValues) => void) => void;
+  /**
+   * Ask the reader before a write: true only on Confirm. Where
+   * `api.features` includes "confirm"; absent on an older prifly.
+   */
+  confirm?(spec: ConfirmSpec): Promise<boolean>;
   /** MCP tools this extension serves to every session. Absent on an older prifly. */
   tools?: { register(tools: ExtensionTool[]): void };
   /**

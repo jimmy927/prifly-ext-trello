@@ -299,3 +299,20 @@ export async function boardsOf(creds: Creds): Promise<BoardEntry[]> {
 export async function listName(id: string, creds: Creds): Promise<string> {
   return (await get<{ name: string }>(`/lists/${id}`, creds, { fields: "name" })).name;
 }
+
+/** A card made at the top or bottom of a list; what Trello answers with. */
+export async function createCard(
+  idList: string,
+  name: string,
+  desc: string,
+  pos: "top" | "bottom",
+  creds: Creds,
+): Promise<{ id: string; shortLink: string; url: string }> {
+  const response = await fetch(url("/cards", creds), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idList, name, desc, pos }),
+  });
+  if (!response.ok) throw new Error(`Trello could not create the card: ${response.status}`);
+  return (await response.json()) as { id: string; shortLink: string; url: string };
+}
