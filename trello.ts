@@ -321,3 +321,38 @@ export async function createCard(
   if (!response.ok) throw new Error(`Trello could not create the card: ${response.status}`);
   return (await response.json()) as { id: string; shortLink: string; url: string };
 }
+
+export type CardInfo = {
+  id: string;
+  name: string;
+  desc: string;
+  url: string;
+  idList: string;
+  idBoard: string;
+};
+
+/** A card's name, description, address, list and board; throws when Trello does not know it. */
+export function cardInfo(id: string, creds: Creds): Promise<CardInfo> {
+  return get<CardInfo>(`/cards/${id}`, creds, { fields: "id,name,desc,url,idList,idBoard" });
+}
+
+/** Replace a card's description (callers append by passing the old text plus the new). */
+export async function setDescription(id: string, desc: string, creds: Creds): Promise<void> {
+  const response = await fetch(url(`/cards/${id}`, creds), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ desc }),
+  });
+  if (!response.ok) throw new Error(`Trello could not update the description: ${response.status}`);
+}
+
+/** Move a card to a list at the top or bottom of it. */
+export async function moveCardTo(
+  id: string,
+  idList: string,
+  pos: "top" | "bottom",
+  creds: Creds,
+): Promise<void> {
+  const response = await fetch(url(`/cards/${id}`, creds, { idList, pos }), { method: "PUT" });
+  if (!response.ok) throw new Error(`Trello could not move the card: ${response.status}`);
+}

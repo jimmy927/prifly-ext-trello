@@ -146,6 +146,16 @@ In it you can
   uploaded ("Not done: you cancelled"). A missing file or unknown card is
   refused before anything is asked or uploaded. It answers with each
   attachment's name and URL.
+- **Update cards** — `trello_update_card` (`card` as link, short id or long id;
+  optional `column` by name, any case, with `position` "bottom" or "top";
+  `comment` in Markdown; `description_append`, added under a blank line and
+  never replacing the description; `archive: true`, done last) changes a card
+  as the reader. `updates` takes up to 50 such objects instead, all on one
+  confirm card. The card lists each card's name, current column and changes;
+  cancelled, nothing changes ("Not done: you cancelled"). Every card and
+  column is checked first, and one invalid entry or an update with no change
+  refuses the whole call, naming it. On a part-way failure the answer says
+  which updates were done and which were not.
 - **A Claude Code skill** — `skills/trello`, for a terminal outside prifly:
   search cards, read one whole, download its attachments with `trello.py`.
   Inside prifly the tools above are used instead. The

@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { cardsTool } from "./cards-tool";
 import { attachFileTool } from "./attach-file-tool";
 import { createCardTool } from "./create-card-tool";
+import { updateCardTool } from "./update-card-tool";
 import { cardFace, cardItem, shortDate } from "./card-face";
 import { cardPrompt } from "./card-prompt";
 import { LINK_ACTION, withLink } from "./link-actions";
@@ -89,6 +90,7 @@ export async function activate(api: ExtensionApi): Promise<() => void> {
     cardsTool(() => world),
     createCardTool(() => world),
     attachFileTool(() => world),
+    updateCardTool(() => world),
     ...readTools(() => world),
   ]);
   let stopped = false;
