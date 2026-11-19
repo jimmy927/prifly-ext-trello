@@ -178,6 +178,11 @@ export async function comment(id: string, text: string, creds: Creds): Promise<v
   if (!response.ok) throw new Error(`Trello could not comment on the card: ${response.status}`);
 }
 
+/** A card's name and long id; throws when Trello does not know the card. */
+export function cardHead(id: string, creds: Creds): Promise<{ id: string; name: string }> {
+  return get<{ id: string; name: string }>(`/cards/${id}`, creds, { fields: "id,name" });
+}
+
 /** A file from disk attached to a card; its address on Trello, for a comment to show it by. */
 export async function attach(
   id: string,

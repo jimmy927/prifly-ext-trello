@@ -139,6 +139,13 @@ In it you can
   cancelled, nothing is created ("Not done: you cancelled"). An unknown board
   or column is refused with the valid ones. It answers with the card's URL
   and id.
+- **Attach files** — `trello_attach_file` (`card` as link, short id or long
+  id; `files` as absolute local paths of any type, Windows `C:\...` or WSL)
+  uploads them to the card as the reader. The reader sees a confirm card with
+  the card's name and each file's name and size first; cancelled, nothing is
+  uploaded ("Not done: you cancelled"). A missing file or unknown card is
+  refused before anything is asked or uploaded. It answers with each
+  attachment's name and URL.
 - **A Claude Code skill** — `skills/trello`, for a terminal outside prifly:
   search cards, read one whole, download its attachments with `trello.py`.
   Inside prifly the tools above are used instead. The
